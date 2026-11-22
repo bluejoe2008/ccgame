@@ -656,8 +656,12 @@ function stroke(context, x1,y1,x2,y2,color,width=1) {
 
 const CHUNK = 192;
 const TEXTURE_STEP = 1.5;
+const PREVIEW_STEP = 12;
+const TERRAIN_BORDER = 2;
+const TERRAIN_NEIGHBORS=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
 const groundArt = new Map();
 const groundPreviews = new Map();
+const featheredTerrain = new WeakMap();
 const terrainLayer = ENGINE_ONLY?null:document.createElement('canvas');
 const revealMask = ENGINE_ONLY?null:document.createElement('canvas');
 const blurredMask = ENGINE_ONLY?null:document.createElement('canvas');
@@ -796,14 +800,16 @@ function sprite(context,name,x,bottom,width,mirror=false) {
 function mix(a,b,t) { return a+(b-a)*t; }
 function smooth(t) { return t*t*(3-2*t); }
 
-function paintTerrainChunk(cx,cy,tile) {
-  tile.width=tile.height=CHUNK/TEXTURE_STEP;
+function paintTerrainChunk(cx,cy,tile,step=TEXTURE_STEP) {
+  tile.width=tile.height=CHUNK/step+2*TERRAIN_BORDER;
   const draw=tile.getContext('2d');
   const pixels=draw.createImageData(tile.width,tile.height);
+  const detailed=step===TEXTURE_STEP;
+  const radius=CHUNK/2+TERRAIN_BORDER*step;
   const hasRelief=battlefield.hills.some(hill=>{
     const p=project(hill.x,hill.y);
-    return Math.abs(p.x-(cx+.5)*CHUNK)<=CHUNK/2+(hill.radius+1)*Math.SQRT2*U &&
-      Math.abs(p.y-(cy+.5)*CHUNK)<=CHUNK/2+(hill.radius+1)*Math.SQRT2*V+hill.height;
+    return Math.abs(p.x-(cx+.5)*CHUNK)<=radius+(hill.radius+1)*Math.SQRT2*U &&
+      Math.abs(p.y-(cy+.5)*CHUNK)<=radius+(hill.radius+1)*Math.SQRT2*V+hill.height;
   });
   const cache=new Map();
   const surface=(x,y) => {
@@ -813,8 +819,8 @@ function paintTerrainChunk(cx,cy,tile) {
   };
   for (let py=0;py<tile.height;py++) {
     for (let px=0;px<tile.width;px++) {
-      const sx=cx*CHUNK+px*TEXTURE_STEP+TEXTURE_STEP/2;
-      const sy=cy*CHUNK+py*TEXTURE_STEP+TEXTURE_STEP/2;
+      const sx=cx*CHUNK+(px-TERRAIN_BORDER+.5)*step;
+      const sy=cy*CHUNK+(py-TERRAIN_BORDER+.5)*step;
       const w=hasRelief?terrainAtProjection(sx,sy):inverse(sx,sy);
       const warp=noise(w.x*.57,w.y*.57,22)-.5;
       const warpY=noise(w.x*.62+7,w.y*.52,23)-.5;
@@ -830,10 +836,10 @@ function paintTerrainChunk(cx,cy,tile) {
       const rock=blend(5);
       const macro=noise(sx*.008,sy*.015,25)-.5;
       const slope=noise(sx*.008+.16,sy*.015+.12,25)-.5-macro;
-      const granule=noise(sx*.095,sy*.14,29)-.5;
-      const speck=hash(Math.floor(sx/TEXTURE_STEP),Math.floor(sy/TEXTURE_STEP),3);
+      const granule=detailed?noise(sx*.095,sy*.14,29)-.5:0;
+      const speck=detailed?hash(Math.floor(sx/TEXTURE_STEP),Math.floor(sy/TEXTURE_STEP),3):.5;
       const patches=noise(sx*.033,sy*.045,32)-.5;
-      const fleck=noise(sx*.18+sy*.035,sy*.31,34);
+      const fleck=detailed?noise(sx*.18+sy*.035,sy*.31,34):.5;
       const waterLines=Math.sin(sy*.29+noise(sx*.018,sy*.033,24)*5.8);
       const shore=Math.max(0,1-Math.abs(wet-.51)*8)*(5+fleck*7);
       const sediment=Math.max(0,1-Math.abs(wet-.22)*4)*(1+patches*6);
@@ -847,8 +853,8 @@ function paintTerrainChunk(cx,cy,tile) {
         mix(Number(c===SURFACES.concrete),Number(d===SURFACES.concrete),fx),fy);
       const elevation=hasRelief?heightAt(w.x,w.y):0;
       const relief=elevation?2.4*(heightAt(w.x+.4,w.y+.25)-heightAt(w.x-.4,w.y-.25))+elevation*.16:0;
-      const shade=mix(dry,moist,wet)*(groundTexture ? .66 : 1)+shore-sediment+relief+
-        groundDetail(sx,sy,grass,wet,concrete)*.76;
+      const detail=detailed?groundDetail(sx,sy,grass,wet,concrete)*.76:0;
+      const shade=mix(dry,moist,wet)*((groundTexture || !detailed) ? .66 : 1)+shore-sediment+relief+detail;
       const index=(py*tile.width+px)*4;
       const asphalt=bridge?SURFACES.bridge:null;
       pixels.data[index]=(asphalt?.[0]??blend(0))+shade+grass*(macro*12-patches*3);
@@ -877,7 +883,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=terrain-cache');
+      const worker=new Worker('terrain-worker.js?v=terrain-seams');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -910,21 +916,42 @@ function requestTerrainChunk(job) {
 
 function terrainPreview(x,y,key) {
   if (groundPreviews.has(key)) return groundPreviews.get(key);
-  const tile=document.createElement('canvas');
-  tile.width=tile.height=12;
-  const context=tile.getContext('2d');
-  const pixels=context.createImageData(12,12);
-  for (let py=0;py<12;py++) {
-    for (let px=0;px<12;px++) {
-      const point=inverse((x+(px+.5)/12)*CHUNK,(y+(py+.5)/12)*CHUNK);
-      const color=SURFACES[terrain(Math.round(point.x),Math.round(point.y))];
-      pixels.data.set([color[0],color[1],color[2],255],(py*12+px)*4);
-    }
-  }
-  context.putImageData(pixels,0,0);
+  const tile=paintTerrainChunk(x,y,document.createElement('canvas'),PREVIEW_STEP);
   groundPreviews.set(key,tile);
   if (groundPreviews.size>160) groundPreviews.delete(groundPreviews.keys().next().value);
   return tile;
+}
+
+function featherTerrain(art,edges) {
+  const previous=featheredTerrain.get(art);
+  if (previous?.edges===edges) return previous.tile;
+  const tile=previous?.tile??document.createElement('canvas');
+  tile.width=tile.height=art.width;
+  const context=tile.getContext('2d');
+  context.drawImage(art,0,0);
+  context.globalCompositeOperation='destination-in';
+  const width=16;
+  const edge=direction=>direction>0?tile.width-TERRAIN_BORDER:TERRAIN_BORDER;
+  for (const [i,[dx,dy]] of TERRAIN_NEIGHBORS.entries()) {
+    if (!(edges&(1<<i))) continue;
+    const x=edge(dx),y=edge(dy);
+    const gradient=dx && dy ?
+      context.createRadialGradient(x,y,TERRAIN_BORDER*1.5,x,y,width):
+      context.createLinearGradient(x,y,x-dx*width,y-dy*width);
+    gradient.addColorStop(0,'#fff0');
+    gradient.addColorStop(1,'#fff');
+    context.fillStyle=gradient;
+    context.fillRect(0,0,tile.width,tile.height);
+  }
+  featheredTerrain.set(art,{edges,tile});
+  return tile;
+}
+
+function drawTerrainChunk(art,x,y,step) {
+  // Overlap texels sampled at the same map coordinates across subpixel edges.
+  const padding=TERRAIN_BORDER*step;
+  const width=CHUNK+2*padding;
+  terrainPainter.drawImage(art,x*CHUNK-padding,y*CHUNK-padding,width,width);
 }
 
 function fogNoise(x,y,period,seed) {
@@ -981,9 +1008,9 @@ function drawAtmosphere(center,w,h) {
 
 function updateFogView(center) {
   const {w,h,scale}=viewport;
-  const {explored,sight}=viewFaction();
+  const {explored}=viewFaction();
   const usablePadding=FOG_PADDING-24;
-  if (fogView?.explored===explored && fogView.sight===sight && fogView.w===w && fogView.h===h &&
+  if (fogView?.explored===explored && fogView.w===w && fogView.h===h &&
       Math.abs(fogView.x-center.x)*scale<usablePadding &&
       Math.abs(fogView.y-center.y)*scale<usablePadding) return fogView;
   const width=Math.ceil((w+FOG_PADDING*2)*FOG_RESOLUTION);
@@ -1005,7 +1032,7 @@ function updateFogView(center) {
   blurPainter.clearRect(0,0,width,height);
   blurPainter.filter='blur('+11*FOG_RESOLUTION+'px)';
   blurPainter.drawImage(revealMask,0,0);
-  fogView={...center,w,h,explored,sight,chunks};
+  fogView={...center,w,h,explored,chunks};
   return fogView;
 }
 
@@ -1027,18 +1054,22 @@ function renderTerrain(center) {
   const x1=Math.floor((center.x+w/(2*scale))/CHUNK);
   const y0=Math.floor((center.y-h/(2*scale))/CHUNK);
   const y1=Math.floor((center.y+h/(2*scale))/CHUNK);
+  const available=[];
+  const pending=new Set();
   let next=null,nearest=Infinity;
   for (let x=x0;x<=x1;x++) {
     for (let y=y0;y<=y1;y++) {
       const key=tileKey(x,y);
       if (!fog.chunks.has(key)) continue;
-      const chunk=groundArt.get(key);
-      terrainPainter.drawImage(chunk??terrainPreview(x,y,key),x*CHUNK,y*CHUNK,CHUNK,CHUNK);
-      if (chunk) {
+      const art=groundArt.get(key);
+      if (art) {
         groundArt.delete(key);
-        groundArt.set(key,chunk);
+        groundArt.set(key,art);
+        available.push({x,y,key,art});
         continue;
       }
+      drawTerrainChunk(terrainPreview(x,y,key),x,y,PREVIEW_STEP);
+      pending.add(key);
       const distance=(center.x/CHUNK-x-.5)**2+(center.y/CHUNK-y-.5)**2;
       if (distance<nearest) {
         next={key,x,y};
@@ -1046,6 +1077,19 @@ function renderTerrain(center) {
       }
     }
   }
+  const details=available.map(tile=>{
+    const {x,y,key,art}=tile;
+    let edges=0;
+    if (pending.size) {
+      for (const [i,[dx,dy]] of TERRAIN_NEIGHBORS.entries()) {
+        if (pending.has(tileKey(x+dx,y+dy))) edges|=1<<i;
+      }
+    }
+    if (!edges) return tile;
+    drawTerrainChunk(terrainPreview(x,y,key),x,y,PREVIEW_STEP);
+    return {...tile,art:featherTerrain(art,edges)};
+  });
+  for (const {art,x,y} of details) drawTerrainChunk(art,x,y,TEXTURE_STEP);
   requestTerrainChunk(next);
   terrainPainter.setTransform(1,0,0,1,0,0);
   terrainPainter.save();
@@ -1074,7 +1118,7 @@ function drawGround(center) {
 
 function drawFogMask(range) {
   const faction=viewFaction();
-  const known=new Path2D(),lit=new Path2D();
+  const explored=new Path2D();
   const chunks=new Set();
   const margin=24/viewport.scale;
   for (let x=range.x1;x<=range.x2;x++) {
@@ -1085,9 +1129,8 @@ function drawFogMask(range) {
       const rx=U*(1.08+hash(x,y,26)*.27),ry=V*(1.14+hash(x,y,27)*.30);
       const px=point.x+(noise(x*.42,y*.42,54)-.5)*12;
       const py=point.y+(noise(x*.42,y*.42,55)-.5)*9;
-      const path=faction.sight.has(key)?lit:known;
-      path.moveTo(px+rx,py);
-      path.ellipse(px,py,rx,ry,0,0,Math.PI*2);
+      explored.moveTo(px+rx,py);
+      explored.ellipse(px,py,rx,ry,0,0,Math.PI*2);
       for (let cx=Math.floor((px-rx-margin)/CHUNK);cx<=Math.floor((px+rx+margin)/CHUNK);cx++) {
         for (let cy=Math.floor((py-ry-margin)/CHUNK);cy<=Math.floor((py+ry+margin)/CHUNK);cy++) {
           if ((cx+1)*CHUNK>BOARD.left && cx*CHUNK<BOARD.right &&
@@ -1096,10 +1139,8 @@ function drawFogMask(range) {
       }
     }
   }
-  maskPainter.fillStyle='#ffffff80';
-  maskPainter.fill(known);
   maskPainter.fillStyle='#fff';
-  maskPainter.fill(lit);
+  maskPainter.fill(explored);
   return chunks;
 }
 
@@ -1728,6 +1769,23 @@ const GAIT_LIMBS={
     ],
   ],
 };
+const DOG_IDLE_PARTS=[
+  [
+    [[151,55],[[146,43],[151,2],[210,0],[210,65],[173,72],[148,64]]],
+    [[43,72],[[0,69],[43,63],[52,69],[36,84],[13,101],[0,103]]],
+  ],
+  [
+    [[136,60],[[117,42],[131,15],[193,15],[193,112],[154,104],[146,84],[125,72]]],
+    [[43,35],[[0,14],[44,15],[55,31],[43,49],[12,58],[0,53]]],
+  ],
+  [
+    [[112,66],[[100,38],[103,0],[166,0],[166,70],[141,72],[112,78]]],
+    [[40,125],[[30,115],[44,131],[28,155],[19,170],[0,172],[0,149]]],
+  ],
+  [
+    [[35,86],[[14,76],[53,76],[60,109],[48,128],[47,153],[23,153],[21,128],[13,106]]],
+  ],
+];
 const gaitArt=new WeakMap();
 
 function gaitLayers(image,type,facing,equine) {
@@ -1746,7 +1804,7 @@ function gaitLayers(image,type,facing,equine) {
     const x=(left+right)/2;
     return [[x,top],[x,h-2],index%2*.5,[[left,top],[right,top],[right,h],[left,h]]];
   });
-  const limbs=definitions.map(([hip,foot,contact,polygon])=>{
+  const cutout=polygon=>{
     const path=new Path2D();
     polygon.forEach(([x,y],index)=>index?path.lineTo(x,y):path.moveTo(x,y));
     path.closePath();
@@ -1760,40 +1818,56 @@ function gaitLayers(image,type,facing,equine) {
     part.translate(-left,-top);
     part.clip(path);
     part.drawImage(image,0,0);
+    return {layer,left,top};
+  };
+  const limbs=definitions.map(([hip,foot,contact,polygon])=>{
     const dx=foot[0]-hip[0],dy=foot[1]-hip[1];
     const squaredLength=dx*dx+dy*dy;
-    return { layer, left, top, hip, foot, contact, axisX:dx/squaredLength, axisY:dy/squaredLength };
+    return {...cutout(polygon),hip,foot,contact,axisX:dx/squaredLength,axisY:dy/squaredLength};
   });
-  const art={body:canvas,limbs};
+  const idleParts=type==='dog'?DOG_IDLE_PARTS[facing].map(([pivot,polygon])=>({...cutout(polygon),pivot})):[];
+  const art={body:canvas,limbs,idleParts};
   gaitArt.set(image,art);
   return art;
 }
 
-function drawGait(context,image,width,height,unit,facing,forward,mirror,equine) {
+function dogRunMix(stride) {
+  return smooth(Math.max(0,Math.min(1,(stride-.40)/.44)));
+}
+
+function drawGait(context,image,width,height,unit,facing,forward,mirror,equine,idlePhase=null) {
   const dog=unit.type==='dog';
   const quadruped=dog || equine;
-  const strideLength=equine?1.46:dog?1.34:.82;
-  const stance=equine?.34:dog?.30:.43;
-  const phase=(unit.travel??0)/strideLength;
-  const strength=smooth(Math.min(1,unit.stride*3.5));
+  const stride=unit.stride??0;
+  const running=dog?dogRunMix(stride):1;
+  const strideLength=equine?1.46:dog?mix(.64,1.34,running):.82;
+  const stance=equine?.34:dog?mix(.52,.30,running):.43;
+  const phase=dog?(unit.gaitCycles??(unit.travel??0)/1.34):(unit.travel??0)/strideLength;
+  const strength=dog?smooth(Math.min(1,stride*2.0)):smooth(Math.min(1,stride*3.5));
+  const resting=idlePhase===null?0:1-smooth(Math.min(1,stride*4));
+  const breath=idlePhase===null?0:Math.sin(idlePhase*.62)*.56*resting;
   const scale=width/image.naturalWidth;
   const strideX=forward.x*(mirror?-1:1)*strideLength*stance;
   const strideY=forward.y*strideLength*stance;
   const bounce=(quadruped?Math.cos(phase*Math.PI*2):Math.cos(phase*Math.PI*4))*
-    (dog?1.25:equine?1.65:.8)*strength;
+    (dog?mix(.53,1.25,running):equine?1.65:.8)*strength+breath;
   const art=gaitLayers(image,unit.type,facing,equine);
 
   context.save();
   context.translate(-width/2,-height+bounce);
   context.scale(scale,scale);
-  for (const {layer,left,top,hip,foot,contact,axisX,axisY} of art.limbs) {
+  for (const [index,{layer,left,top,hip,foot,contact:runContact,axisX,axisY}] of art.limbs.entries()) {
+    const trotContact=art.limbs.length===4?(index===0 || index===3?.5:0):runContact;
+    const contact=dog?mix(trotContact,runContact,running):runContact;
     const cycle=(phase+1-contact)%1;
     const swing=Math.max(0,(cycle-stance)/(1-stance));
     // During contact the foot moves backwards exactly as far as the unit advances.
     const reach=cycle<stance?.5-cycle/stance:-.5+smooth(swing);
-    const lift=Math.sin(swing*Math.PI)*(dog?4.7:equine?4.4:4);
+    const lift=Math.sin(swing*Math.PI)*(dog?mix(2.5,4.7,running):equine?4.4:4);
+    const pawShift=idlePhase===null || index!==1?0:
+      resting*Math.max(0,Math.sin(idlePhase*.31))**20*(equine?2.1:1.6);
     const dx=strength*(strideX*reach/scale+(hip[0]-foot[0])*.48);
-    const dy=(strength*(strideY*reach-lift)-bounce)/scale;
+    const dy=(strength*(strideY*reach-lift)-bounce-pawShift)/scale;
     context.save();
     context.translate(hip[0],hip[1]);
     context.transform(1+dx*axisX,dy*axisX,dx*axisY,1+dy*axisY,0,0);
@@ -1801,31 +1875,21 @@ function drawGait(context,image,width,height,unit,facing,forward,mirror,equine) 
     context.restore();
   }
   context.drawImage(art.body,0,0);
+  for (const [index,{layer,left,top,pivot:[x,y]}] of art.idleParts.entries()) {
+    const idle=idlePhase??0;
+    const glance=Math.max(0,Math.sin(idle*.37-.8))**6;
+    const turn=index===0?(Math.sin(phase*Math.PI*2-.6)*.045*strength+glance*.095*resting):
+      (Math.sin(idle*1.55)*.15*resting+Math.cos(phase*Math.PI*2)*.05*strength);
+    context.save();
+    context.translate(x,y);
+    context.rotate(turn);
+    context.drawImage(layer,left-x,top-y);
+    context.restore();
+  }
   context.restore();
 }
 
-function drawIdlePose(context,image,width,height,phase,type,front) {
-  const sw=image.naturalWidth,sh=image.naturalHeight;
-  if (type==='dog' && !front) {
-    const tail=Math.round(sw*.28);
-    const scale=width/sw;
-    const wag=Math.sin(phase*1.7)*(.6+.4*Math.sin(phase*.31));
-    for (let i=0;i<5;i++) {
-      const start=Math.round(tail*i/5),end=Math.round(tail*(i+1)/5);
-      const sway=wag*(1-i/5)**2;
-      context.drawImage(image,start,0,end-start,sh,start*scale-width/2+sway*.55,
-        -height+sway*2.7,(end-start)*scale+.15,height);
-    }
-    context.drawImage(image,tail,0,sw-tail,sh,tail*scale-width/2,-height,(sw-tail)*scale,height);
-    return;
-  }
-
-  if (type==='dog') {
-    const breath=Math.sin(phase*.78)*.28;
-    context.drawImage(image,-width/2,-height+breath,width,height-breath);
-    return;
-  }
-
+function drawIdlePose(context,image,width,height,phase,type) {
   const engineer=type==='engineer';
   const shoulder=engineer?.44:.53;
   const arm=engineer?[0,.35,shoulder,.68]:[shoulder,.24,1,type==='rocketeer'?.50:.56];
@@ -1909,7 +1973,7 @@ function renderUnit(context,unit,origin) {
   const travel=unit.travel??0;
   const phase=travel*Math.PI*2/(equine?1.31:dog?1.01:.69);
   const strength=reducedMotion.matches?0:(unit.stride??0);
-  const idlePhase=reducedMotion.matches?null:game.time*3.75+(unit.id??0)*1.37;
+  const idlePhase=reducedMotion.matches?null:lastFrame*.00375+(unit.id??0)*1.37;
   if (idlePhase!==null && wheeled && strength<.16) drawIdleExhaust(context,unit,origin,idlePhase);
   const forward=project(Math.cos(unit.heading),Math.sin(unit.heading));
   const angle=Math.atan2(forward.y,Math.abs(forward.x));
@@ -1930,10 +1994,10 @@ function renderUnit(context,unit,origin) {
     if (mirror) context.scale(-1,1);
     if (isAirborne(unit)) {
       context.drawImage(image,-width/2,-height*.75,width,height);
-    } else if (!wheeled && strength>.025) {
-      drawGait(context,image,width,height,unit,facing,forward,mirror,equine);
+    } else if (!wheeled && idlePhase!==null && (quadruped || strength>.025)) {
+      drawGait(context,image,width,height,unit,facing,forward,mirror,equine,quadruped?idlePhase:null);
     } else if (!wheeled && !equine && idlePhase!==null) {
-      drawIdlePose(context,image,width,height,idlePhase,unit.type,facing===3);
+      drawIdlePose(context,image,width,height,idlePhase,unit.type);
     } else context.drawImage(image,-width/2,-height,width,height);
     context.restore();
     return;
@@ -2373,7 +2437,7 @@ function drawWorld() {
       if (!discovery) continue;
       const age=game.time-discovery.stamp;
       if (age<.10) continue;
-      const fade=smooth(Math.min(1,(age-.10)/.54))*(perspective.sight.has(key)?1:.63);
+      const fade=smooth(Math.min(1,(age-.10)/.54));
       const kind=terrain(x,y), mineral=amountAt(x,y), seed=hash(x,y,18), p=projectGround(x,y);
       if (mineral) objects.push({depth:x+y+.02,fade,draw:()=>{
         const rich=seam(x,y)?.grade==='rich';
@@ -2532,7 +2596,7 @@ function terrainRadar() {
   for (const tile of cells) {
     const p=mapPoint(tile.x,tile.y);
     const kind=terrain(tile.x,tile.y);
-    const color=COLORS[kind]+(perspective.sight.has(tileKey(tile.x,tile.y))?'':'80');
+    const color=COLORS[kind];
     if (!terrainPaths.has(color)) terrainPaths.set(color,new Path2D());
     const path=terrainPaths.get(color);
     path.moveTo(p.x,p.y-ry);
@@ -3142,10 +3206,15 @@ function localDetour(unit) {
 }
 
 function recordTravel(unit,distance,dt,turn=0) {
-  unit.travel=(unit.travel??0)+distance;
+  const previousTravel=unit.travel??0;
+  unit.travel=previousTravel+distance;
   const movement=distance>0 ? Math.min(1,distance/(dt*unit.speed)) : 0;
   const blend=1-Math.exp(-dt*14);
   unit.stride=mix(unit.stride??0,movement,blend);
+  if (unit.type==='dog' && distance>0) {
+    const length=mix(.64,1.34,dogRunMix(unit.stride));
+    unit.gaitCycles=(unit.gaitCycles??previousTravel/1.34)+distance/length;
+  }
   const lean=dt ? Math.max(-.046,Math.min(.046,turn/dt*.013))*movement : 0;
   unit.lean=mix(unit.lean??0,lean,blend);
   if (reducedMotion.matches || distance<=0 || !VEHICLE_CONTACT_RADIUS[unit.type] ||
@@ -3189,7 +3258,8 @@ function navigate(unit,dt) {
   const heading=Math.atan2(target.y-unit.y,target.x-unit.x);
   const {gap,turn}=turnTowards(unit,heading,motion.turnRate,dt);
   const angle=Math.abs(gap);
-  const steering=radius ? Math.max(0,Math.cos(angle))**3 : 1;
+  const dog=unit.type==='dog';
+  const steering=radius || dog ? Math.max(0,Math.cos(angle))**(dog?2:3) : 1;
   // Only the last few path points can affect the stopping distance at normal speeds.
   let stoppingDistance=Infinity;
   if (unit.route.length<=7) {
@@ -3204,7 +3274,9 @@ function navigate(unit,dt) {
   const oldSpeed=unit.velocity??0;
   unit.velocity=Math.max(oldSpeed-motion.braking*dt,Math.min(targetSpeed,oldSpeed+motion.acceleration*dt));
   // Pivot in place through very tight turns to avoid a sideways slide.
-  let remaining=radius && angle>1.11 ? 0 : dt*unit.velocity;
+  const pivot=(radius || dog) && angle>1.11;
+  if (dog && pivot) unit.velocity=0;
+  let remaining=pivot?0:dt*unit.velocity;
   let traveled=0;
   while (unit.route.length && remaining>0) {
     const node=unit.route[0];

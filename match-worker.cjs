@@ -124,7 +124,7 @@ function pick(record, keys) {
 }
 
 const unitKeys = ['id','team','type','label','x','y','heading','speed','health','mode','engaged','travel',
-  'stride','lean','turretHeading','aim','altitude','cargo','autoMine','rank'];
+  'stride','gaitCycles','lean','turretHeading','aim','altitude','cargo','autoMine','rank'];
 const buildingKeys = ['team','type','x','y','width','height','remaining','health','axis','nextPayout'];
 const planKeys = ['task','kind','homeReserve'];
 
