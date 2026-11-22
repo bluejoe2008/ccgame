@@ -50,7 +50,7 @@ const TASK_KINDS = {
 };
 const OWN_FIELDS = ["aircraft", "airports", "army", "barracks", "credits", "defenses", "factories", "home_guard", "home_threat", "miners", "miners_ordered", "oil", "ore", "power", "strength"];
 const ENEMY_FIELDS = ["aircraft", "armor", "buildings", "infantry", "power_plants", "production", "remembered", "strength"];
-const PROMPT = "Plan for one commander in a fictional browser RTS.\nChoose the zero-based index of a primary option and, if useful, a different\nfollowup option to try only after the primary succeeds. Use -1 for no followup.\nEach option is an executable goal. Distance is measured from home in tiles.\nRisk reflects hostile combat units spotted near that option. Enemy observations\ncover only what this side has seen. The remembered count may be stale.\nProtect the base when attacked, secure a sustainable income and reliable power,\nand prefer safe scouting and regrouping when hostile strength is uncertain.\nThe objective is to defeat the opposing faction. When combat forces are ready,\nadvance into the explored frontier if enemies remain undiscovered. Engage\nfeasible targets as soon as your own scouts find them.\nIn the early economy, aim for at least two miners when the base is safe.\nMining and reliable power fund later military expansion. A harass option sends\na small fast squad to disrupt exposed income while retaining home guards.\nIt can delay an opponent before a full strike is viable. Consider home_guard\nand the observed home_threat to avoid leaving the base open to a counter-raid.\nExtra factories boost and parallelize vehicle production when power is stable.\nAirpower buys an airport and a versatile fighter. It needs reliable funding and power.\nWhen attacking, prefer an exposed power plant if cutting power can disrupt\nenemy production. Factories and barracks slow down on insufficient power.\nUse the previous outcome to avoid repeating an approach that stalled.\nDo not use tools, files, shell commands or outside knowledge. Return only\nthe JSON object with the two option indices.\nObservations: ";
+const PROMPT = "Plan for one commander in a fictional browser RTS.\nChoose the zero-based index of a primary option and, if useful, a different\nfollowup option to try only after the primary succeeds. Use -1 for no followup.\nEach option is an executable goal. Distance is measured from home in tiles.\nRisk reflects hostile combat units spotted near that option. Enemy observations\ncover only what this side has seen. The remembered count may be stale.\nProtect the base when attacked, secure a sustainable income and reliable power,\nand prefer safe scouting and regrouping when hostile strength is uncertain.\nThe objective is to defeat the opposing faction. When combat forces are ready,\nadvance into the explored frontier if enemies remain undiscovered. Engage\nfeasible targets as soon as your own scouts find them.\nIn the early economy, aim for at least two miners when the base is safe.\nMining and reliable power fund later military expansion. A harass option sends\na small fast squad to disrupt exposed income while retaining home guards.\nIt can delay an opponent before a full strike is viable. Consider home_guard\nand the observed home_threat to avoid leaving the base open to a counter-raid.\nExtra factories boost and parallelize vehicle production when power is stable.\nAirpower establishes an airport for reconnaissance, bombing, and troop transport. It needs reliable funding and power.\nWhen attacking, prefer an exposed power plant if cutting power can disrupt\nenemy production. Factories and barracks slow down on insufficient power.\nUse the previous outcome to avoid repeating an approach that stalled.\nDo not use tools, files, shell commands or outside knowledge. Return only\nthe JSON object with the two option indices.\nObservations: ";
 
 const { access, mkdtemp, readFile, rm, writeFile } = require('node:fs/promises');
 const { constants } = require('node:fs');
@@ -68,8 +68,21 @@ function validCount(value, limit = 10000000) {
   return Number.isInteger(value) && value >= 0 && value <= limit;
 }
 
+function validExperience(value) {
+  return hasFields(value,['sample','wins','losses','draws','last','focus']) &&
+    validCount(value.sample,8) && value.sample>0 &&
+    ['wins','losses','draws'].every(key=>validCount(value[key],8)) &&
+    value.wins+value.losses+value.draws===value.sample &&
+    ['win','loss','draw'].includes(value.last) && Array.isArray(value.focus) &&
+    value.focus.length<=3 && new Set(value.focus).size===value.focus.length &&
+    value.focus.every(task=>typeof task==='string' && Object.hasOwn(TASK_KINDS,task));
+}
+
 function validObservation(body) {
-  return hasFields(body,['personality','situation','own','enemy','recent','options']) &&
+  const fields=['personality','situation','own','enemy','recent','options'];
+  const hasExperience=body && Object.hasOwn(body,'experience');
+  if (hasExperience) fields.push('experience');
+  return hasFields(body,fields) && (!hasExperience || validExperience(body.experience)) &&
     ['conservative','aggressive'].includes(body.personality) &&
     ['raided','outmatched','contested','clear'].includes(body.situation) &&
     hasFields(body.own,OWN_FIELDS) && OWN_FIELDS.every(field => validCount(body.own[field])) &&
@@ -113,7 +126,10 @@ async function chooseWithCodex(binary,snapshot) {
         '--output-schema',schema,'--output-last-message',result,'--cd',directory,'-',
       ],{ timeout:32000, maxBuffer:1024*1024 }, error=>resolve(!error));
       process.stdin.on('error',()=>{});
-      process.stdin.end(PROMPT + JSON.stringify(snapshot));
+      const history=snapshot.experience ?
+        'The experience field summarizes only this faction’s own earlier rounds. '+
+        'Use its focus to choose among feasible options when current scouting and urgency support it.\n' : '';
+      process.stdin.end(history + PROMPT + JSON.stringify(snapshot));
     });
     if (!completed) return null;
     const reply = JSON.parse(await readFile(result,'utf8'));

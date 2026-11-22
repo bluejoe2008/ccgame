@@ -2,11 +2,13 @@
 
 const http = require('node:http');
 const fs = require('node:fs/promises');
+const { createReadStream } = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { gzip } = require('node:zlib');
 const { promisify, parseArgs } = require('node:util');
 const { Worker } = require('node:worker_threads');
+const { pipeline } = require('node:stream/promises');
 const { findCodex, chooseWithCodex, validObservation } = require('./game-planner.cjs');
 
 const compress = promisify(gzip);
@@ -138,6 +140,23 @@ async function serve(request,response) {
     const team=url.searchParams.get('perspective')??'player';
     if (team!=='player' && team!=='enemy') return send(400,{error:'invalid_perspective'});
     return send(200,await matchCall('snapshot',{team}));
+  }
+  const historyLog=/^\/api\/history\/(\d{1,12})\/log$/.exec(url.pathname);
+  if (request.method==='GET' && (url.pathname==='/api/history' || historyLog)) {
+    const team=url.searchParams.get('perspective')??'player';
+    if (team!=='player' && team!=='enemy') return send(400,{error:'invalid_perspective'});
+    if (!historyLog) {
+      const before=url.searchParams.get('before');
+      if (before!==null && !/^[1-9]\d{0,11}$/.test(before)) return send(400,{error:'invalid_round'});
+      return send(200,await matchCall('history',{team,before:Number(before)}));
+    }
+    const round=Number(historyLog[1]);
+    const file=await matchCall('historyLog',{team,round});
+    if (!file) return send(404,{error:'round_not_found'});
+    const {size}=await fs.stat(file);
+    response.writeHead(200,{ 'Content-Type':'application/x-ndjson; charset=utf-8','Content-Length':size,
+      'Content-Disposition':'attachment; filename="round-'+round+'-'+team+'.jsonl"','Cache-Control':'no-store' });
+    return pipeline(createReadStream(file),response);
   }
   if (request.method==='POST') {
     if (!sameOrigin(request)) return send(403,{error:'origin'});

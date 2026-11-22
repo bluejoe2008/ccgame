@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=terrain-cache">
+  <link rel="stylesheet" href="style.css?v=battle-history">
   <script src="audio.js?v=laser-mix" defer></script>
-  <script src="commander.js?v=aircraft-missions" defer></script>
-  <script src="observer.js?v=tank-reference" defer></script>
+  <script src="commander.js?v=battle-history" defer></script>
+  <script src="observer.js?v=battle-effects" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -59,6 +59,7 @@
             <summary>行动记录</summary>
             <ol id="log" aria-label="行动记录"></ol>
           </details>
+          <button id="open-history" class="metal-button session-button" type="button">战史</button>
           <div class="map-coords" id="coords" aria-label="坐标">X 00 / Y 00</div>
         </div>
       </div>
@@ -116,23 +117,37 @@
     </section>
   </main>
 
-  <dialog id="match-result" aria-labelledby="match-title" aria-describedby="match-summary">
-    <header><h2 id="match-title"></h2></header>
-    <p id="match-summary"></p>
-    <footer><button class="metal-button" id="continue-match" type="button">继续观战</button><button class="metal-button" id="restart-match" type="button">再看一局</button></footer>
+  <dialog id="battle-history" aria-labelledby="history-title">
+    <form method="dialog">
+      <header><h2 id="history-title">战史与复盘</h2><button type="submit" class="metal-button">关闭</button></header>
+    </form>
+    <section class="history-panel">
+      <div class="history-controls">
+        <label for="history-round">对局</label>
+        <select id="history-round" disabled></select>
+        <button id="history-older" class="metal-button" type="button" hidden>更早对局</button>
+      </div>
+      <p id="history-status" aria-live="polite"></p>
+      <p id="history-summary"></p>
+      <ul id="history-evidence"></ul>
+      <h3 id="history-lessons-title" hidden>带入下一局的经验</h3>
+      <ul id="history-lessons"></ul>
+      <a id="history-log" download hidden>下载本方行动日志</a>
+    </section>
   </dialog>
 
   <dialog id="help" aria-labelledby="help-heading">
     <form method="dialog">
       <header><h2 id="help-heading">操作说明</h2><button type="submit" class="metal-button">关闭</button></header>
       <dl>
-        <div><dt>共享对局</dt><dd>「开始」在服务器开启一场比赛。「结束」停止模拟并保留最后的战况。刷新页面会回到当前对局。蓝红双方由电脑控制。选中活动单位后，镜头自动跟踪，可用「跟踪」按钮或 F 暂停及恢复。</dd></div>
-        <div><dt>视野</dt><dd>拖动地图、按方向键或操作小地图可停止跟踪并移动视野。点击「蓝方」或「红方」切换阵营视角。未探索区域被迷雾遮住，离开视野的已探索地形会变暗。地图中的山丘会使地面单位上坡减速。</dd></div>
+        <div><dt>共享对局</dt><dd>分出胜负后，服务器归档战报并自动开始下一局。「结束」停止连战并保留战况，「开始」恢复连战。刷新页面会回到当前对局。「战史」提供本方复盘和日志下载。</dd></div>
+        <div><dt>视野</dt><dd>拖动地图、按方向键或操作小地图可停止跟踪并移动视野。点击「蓝方」或「红方」切换阵营视角。迷雾覆盖未探索区域，敌军进入本方当前视野后才会显示。山丘会使地面单位上坡减速。</dd></div>
         <div><dt>建造和收入</dt><dd>电脑自动部署基地车，在建造场附近施工。双方基地附近是贫矿，中央富矿储量更大、开采更快。两类矿的再生储量都有限，近矿耗尽后，矿车会寻找已探明的远矿。满供电的油田每 15 秒提供 280 储备，首次占领奖励 260。建造、生产和修理消耗储备和时间，资金不足时会暂停维修。</dd></div>
         <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>
         <div><dt>科技</dt><dd>双方可投入储备研发未知的攻击或经济科技。成果公开后可再花费资金制造超级武器或增收设备。点击「科技」查看进度。</dd></div>
         <div><dt>电力与生产</dt><dd>多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。电厂被摧毁后，供电不足会拖慢兵工厂和兵营的生产。</dd></div>
-        <div><dt>空军</dt><dd>机场受供电影响并生产战斗机。战斗机可飞越水域及建筑，侦察、空战和攻击地面目标。火箭筒兵、机枪工事和激光塔能还击空中目标。</dd></div>
+        <div><dt>空军</dt><dd>机场生产轰炸机、侦察机和运输直升机。轰炸机单次投弹后返航，侦察机负责探路，运输直升机最多搭载四名友方人员或军犬。固定翼飞机失去可用跑道后会迫降坠毁。</dd></div>
+        <div><dt>坦克维修</dt><dd>修理厂每次接收一辆受损坦克。坦克会自行驶入维修区，维修消耗储备，完成后驶离修理厂。</dd></div>
         <div><dt>休闲与训练</dt><dd>棋牌室提高活动单位射速，训练操场提高活动单位伤害。供电不足会减弱加成。</dd></div>
         <div><dt>指挥智能体</dt><dd>双方会在形成首批战斗部队后向已侦察的前沿推进，发现目标后主动交战。主力出击时会留下守军，基地遇袭会召回援军。点击「科技与指挥」查看当前阵营的计划。</dd></div>
         <div><dt>胜负</dt><dd>一方失去全部建筑和活动单位时，该方失败。双方同时失去全部单位时为平局。</dd></div>

@@ -14,6 +14,17 @@ const motionDelay = 220;
 const linearPoseFields = ['x','y','travel','stride','gaitCycles','lean','altitude'];
 const angularPoseFields = ['heading','turretHeading'];
 const poseFields = [...linearPoseFields,...angularPoseFields];
+const historyKey = 'ore-command-open-history';
+let historyPage = [];
+let historyBefore = null;
+let historyRequest = 0;
+
+function rememberHistory(round) {
+  try {
+    if (round === null) sessionStorage.removeItem(historyKey);
+    else sessionStorage.setItem(historyKey,String(round));
+  } catch {}
+}
 
 function savedPerspective() {
   try {
@@ -29,14 +40,90 @@ async function fetchObservation(team) {
   return response.json();
 }
 
+function battleClock(seconds) {
+  const elapsed=Math.floor(seconds);
+  return String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
+}
+
 function updateMatchControls() {
-  const elapsed = Math.floor(observedMatch?.time ?? 0);
-  const clock = String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
+  const clock=battleClock(observedMatch?.time??0);
   const statuses = { idle:'等待开始', running:'进行中', ended:'已结束', finished:'已分胜负' };
-  byId('match-clock').textContent = observerConnected ? (statuses[observedMatch?.status] ?? '连接中') + ' · ' + clock : '重连中 · ' + clock;
+  const number=observedMatch?.round?'第 '+observedMatch.round+' 局 · ':'';
   const running = observedMatch?.status === 'running';
+  const rollover=observedMatch?.status==='finished' && observedMatch.auto;
+  const results={player:'蓝方获胜',enemy:'红方获胜',draw:'平局'};
+  const winner=results[observedMatch?.outcome];
+  const seconds=rollover?Math.max(0,Math.ceil((observedMatch.nextRoundAt-Date.now())/1000)):0;
+  const status=rollover ? (winner??'已分胜负')+' · '+(seconds?seconds+' 秒后开始下一局':'准备下一局') :
+    (winner??statuses[observedMatch?.status]??'连接中')+' · '+clock;
+  byId('match-clock').textContent=number+(observerConnected?status:'重连中 · '+clock);
   byId('start-session').disabled = running || !observerConnected || pendingControl;
-  byId('end-session').disabled = !running || !observerConnected || pendingControl;
+  byId('end-session').disabled = (!running && !rollover) || !observerConnected || pendingControl;
+}
+
+function updateHistoryReview() {
+  const select=byId('history-round');
+  const item=historyPage.find(round=>String(round.round)===select.value);
+  const logLink=byId('history-log');
+  byId('history-summary').textContent=item?item.review.summary:'';
+  byId('history-status').textContent=item?(item.completeLogs?'':'此局跨越升级，只保存了接入时尚留存的旧日志及之后的记录。'):
+    '已有战史会在对局结束后显示。';
+  const fill=(id,text)=>byId(id).replaceChildren(...text.map(value=>{
+    const line=document.createElement('li');
+    line.textContent=value;
+    return line;
+  }));
+  fill('history-evidence',item?.review.evidence??[]);
+  const lessons=item?.review.lessons.map(lesson=>lesson.reason)??[];
+  byId('history-lessons-title').hidden=!lessons.length;
+  fill('history-lessons',lessons);
+  logLink.hidden=!item;
+  if (item) {
+    logLink.href='/api/history/'+item.round+'/log?perspective='+game.perspective;
+    rememberHistory(item.round);
+  }
+}
+
+async function loadBattleHistory({older=false,selected=0}={}) {
+  const request=++historyRequest;
+  const team=game.perspective;
+  const before=older?historyBefore:selected?Number(selected)+1:null;
+  byId('history-status').textContent='正在加载战史…';
+  byId('history-older').disabled=true;
+  try {
+    const url='/api/history?perspective='+team+(before?'&before='+before:'');
+    const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(9000)});
+    if (!response.ok) throw new Error('History unavailable');
+    const page=await response.json();
+    if (request!==historyRequest || !byId('battle-history').open) return;
+    historyPage=older?[...historyPage,...page.rounds]:page.rounds;
+    historyBefore=page.before;
+    const select=byId('history-round');
+    const selectedRound=older?page.rounds[0]?.round:selected||historyPage[0]?.round;
+    const resultLabels={win:'胜',loss:'负',draw:'平',stopped:'人工结束'};
+    select.replaceChildren(...historyPage.map(round=>{
+      const option=document.createElement('option');
+      option.value=round.round;
+      option.textContent='第 '+round.round+' 局 · '+resultLabels[round.review.result]+' · '+battleClock(round.duration);
+      return option;
+    }));
+    select.disabled=!historyPage.length;
+    if (historyPage.some(round=>round.round===Number(selectedRound))) select.value=selectedRound;
+    byId('history-title').textContent=(team==='player'?'蓝方':'红方')+'战史与复盘';
+    byId('history-older').hidden=!historyBefore;
+    updateHistoryReview();
+  } catch {
+    if (request===historyRequest) byId('history-status').textContent='战史暂时无法加载。';
+  } finally {
+    if (request===historyRequest) byId('history-older').disabled=false;
+  }
+}
+
+function openBattleHistory(selected=0) {
+  const dialog=byId('battle-history');
+  if (!dialog.open) dialog.showModal();
+  rememberHistory(selected);
+  loadBattleHistory({selected});
 }
 
 function updateObserverEntities(records, registry, destination, receivedAt) {
@@ -135,6 +222,7 @@ function applyObservation(snapshot) {
   shots.splice(0,shots.length,...snapshot.shots);
   wrecks.splice(0,wrecks.length,...snapshot.wrecks);
   movementDust.splice(0,movementDust.length,...snapshot.dust);
+  groundImpacts.splice(0,groundImpacts.length,...(snapshot.impacts??[]));
   for (const entry of snapshot.logs) {
     if (entry.id <= lastLog) continue;
     log(entry.message,entry.team,entry.time);
@@ -147,7 +235,7 @@ function applyObservation(snapshot) {
       if (event.id > previousSound) playAt(event.cue,event,{ id:event.source,team:snapshot.team });
     }
   }
-  if (outcomeChanged && game.outcome) showMatchResult(game.outcome);
+  if (outcomeChanged && game.outcome && !document.hidden) sound.play(game.outcome===snapshot.team?'ready':'alert');
   updateMatchControls();
 }
 
@@ -184,7 +272,7 @@ function changeObserverPerspective(team,origin) {
   displayedUnits.clear();
   displayedBuildings.clear();
   unitMotionSamples.clear();
-  units.length = structures.length = shots.length = wrecks.length = movementDust.length = 0;
+  units.length = structures.length = shots.length = wrecks.length = movementDust.length = groundImpacts.length = 0;
   byId('log').replaceChildren();
   lastLog = 0;
   lastSound = null;
@@ -223,6 +311,16 @@ function attachObserver(snapshot) {
   applyObservation(snapshot);
   byId('start-session').addEventListener('click',()=>controlMatch('start'));
   byId('end-session').addEventListener('click',()=>controlMatch('end'));
+  byId('open-history').addEventListener('click',()=>openBattleHistory());
+  byId('history-round').addEventListener('change',updateHistoryReview);
+  byId('history-older').addEventListener('click',()=>loadBattleHistory({older:true}));
+  byId('battle-history').addEventListener('close',()=>{
+    historyRequest++;
+    rememberHistory(null);
+  });
+  let previousHistory=null;
+  try { previousHistory=sessionStorage.getItem(historyKey); } catch {}
+  if (previousHistory!==null) openBattleHistory(Number(previousHistory));
   document.addEventListener('visibilitychange',()=>{ if (!document.hidden) pollObservation(); });
   syncHud();
   pollObservation();
@@ -237,7 +335,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=tank-reference';
+  script.src = 'game.js?v=battle-effects';
   document.head.append(script);
 }
 bootObserver();

@@ -117,7 +117,8 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     const key=target??task;
     if (score>0 && (faction.commander.cooldowns.get(key)??0)>game.time) return;
     const risk=threatNear(point);
-    options.push({task,score,target,key,point,goal,kind,distance:Math.round(distance(point)),
+    const lessons=score>0?(faction.experience?.weights?.[task]??0):0;
+    options.push({task,score:score+lessons,target,key,point,goal,kind,distance:Math.round(distance(point)),
       risk:risk>Math.max(55,ownPower*.75)?'high':risk>0?'medium':'low'});
   };
   const factories=count('factory'),barracks=count('barracks'),yards=count('yard');
@@ -230,6 +231,7 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     if (waypoint) add('advance',108,waypoint,'frontier',waypoint);
   }
   if (!options.length) add('mobilize',0,null,'reserve',null,army.length+2);
+  const {sample,wins,losses,draws,last,focus}=faction.experience??{};
   return {options,contacts,fleet,power,defenses,army,members,aircraft,buildings,campaignReady,
     snapshot:{
       personality:faction.strategy,
@@ -244,6 +246,7 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
         strength:Math.round(rivals.reduce((total,unit)=>total+combatPower(unit),0)),
         remembered:[...faction.reports.keys()].filter(unit=>!contacts.includes(unit)).length},
       recent:faction.commander.last,
+      ...(sample?{experience:{sample,wins,losses,draws,last,focus}}:{}),
       options:options.map(({task,kind,distance,risk})=>({task,kind,distance,risk})),
     },
   };
@@ -320,7 +323,11 @@ function evaluateCommand(faction,plan,battle) {
 function reviewCommander(faction,army,buildings,members,intelligence,raid) {
   const commander=faction.commander;
   if (raid?.critical) {
-    if (commander.plan) commander.last={task:commander.plan.task,result:'interrupted'};
+    if (commander.plan) {
+      commander.last={task:commander.plan.task,result:'interrupted'};
+      log(factionName(faction.team)+'指挥计划：'+commandLabel(commander.plan)+COMMAND_RESULTS.interrupted+'。',
+        faction.team,game.time,commander.last);
+    }
     commander.plan=null;
     commander.proposal=null;
     commander.nextReview=0;
@@ -344,7 +351,8 @@ function reviewCommander(faction,army,buildings,members,intelligence,raid) {
       if (result==='lost' || result==='stalled' && previous.task==='capture') {
         commander.scoutLead={point:previous.point,until:game.time+23};
       }
-      log(factionName(faction.team)+'指挥计划：'+commandLabel(previous)+COMMAND_RESULTS[result]+'。',faction.team);
+      log(factionName(faction.team)+'指挥计划：'+commandLabel(previous)+COMMAND_RESULTS[result]+'。',
+        faction.team,game.time,commander.last);
       next=result==='complete'?available(previous.followup):null;
       if (next) source=previous.source;
       commander.plan=null;

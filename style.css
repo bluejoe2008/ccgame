@@ -415,11 +415,14 @@ dialog h2 { font-size: 17px; }
 dialog dl { display: grid; gap: 12px; padding: 0 16px 8px; }
 dialog dt { color: var(--green); font-size: 13px; font-weight: 700; }
 dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; }
-#match-result { position: fixed; inset: 76px 0 auto; z-index: 4; width: min(330px, calc(100vw - 24px)); }
-#match-result[data-outcome="player"] h2 { color: var(--green); }
-#match-result[data-outcome="enemy"] h2 { color: #edaa95; }
-#match-summary { margin: 15px 16px; color: #d2d8c4; font-size: 13px; }
-#match-result footer { display: flex; justify-content: flex-end; gap: 8px; padding: 0 16px 14px; }
+.history-panel { padding: 14px 16px 18px; line-height: 1.55; }
+.history-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.history-controls select { max-width: 100%; padding: 5px 8px; color: var(--text); background: #19241a; border: 1px solid #687554; }
+.history-panel p { margin: 10px 0; }
+.history-panel ul { padding-inline-start: 22px; }
+.history-panel h3 { font-size: 13px; color: var(--green); }
+.history-panel a { color: #b4d8ef; }
+#history-status { color: var(--muted); font-size: 12px; }
 @media (max-width: 1040px) {
   body { padding-inline: 12px; }
 }
@@ -451,7 +454,7 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
   .map-label { gap: 4px; }
   .map-label h2 { display: none; }
   .session-button { min-width: 30px; padding-inline: 4px; }
-  .match-clock { font-size: 9px; }
+  .match-clock { font-size: 9px; white-space: normal; }
   .map-footer { gap: 8px; }
   .map-footer .footer-hint { display: none; }
   .map-hud { inset: auto 7px 8px; }

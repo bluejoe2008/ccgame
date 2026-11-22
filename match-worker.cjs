@@ -6,22 +6,27 @@ const { randomInt, randomUUID } = require('node:crypto');
 const vm = require('node:vm');
 const v8 = require('node:v8');
 const { parentPort, workerData } = require('node:worker_threads');
+const { BattleHistory, labels, replaceFile } = require('./battle-history.cjs');
 
 const { checkpointFile, plannerOrigin } = workerData;
 const version = 1;
 const step = .04;
+const roundDelay = 10000;
+fs.mkdirSync(path.dirname(checkpointFile), { recursive:true, mode:0o700 });
+const history = new BattleHistory(checkpointFile);
 const sources = ['commander.js', 'game.js'].map(name =>
   new vm.Script(fs.readFileSync(path.join(__dirname, name), 'utf8'), { filename: name }));
 
 const interfaceScript = new vm.Script(`({
   game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites,
-  shots, wrecks, movementDust, stepSimulation, canSeeEntity, oreCapacity, amountAt, tileUnder,
+  shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, oreCapacity, amountAt, tileUnder,
   nextId() { return nextUnitId; },
   restore(saved) {
     for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
     units.splice(0, units.length, ...saved.units);
     structures.splice(0, structures.length, ...saved.structures);
     searchSites.splice(0, searchSites.length, ...saved.searchSites);
+    groundImpacts.push(...(saved.groundImpacts??[]));
     for (const [machine, stored] of [[deposits,saved.deposits],[oreReserves,saved.oreReserves],
       [recoveringOre,saved.recoveringOre]]) {
       machine.clear();
@@ -29,6 +34,20 @@ const interfaceScript = new vm.Script(`({
     }
     nextUnitId = saved.nextUnitId;
     Object.assign(game, saved.game);
+    if (saved.match.status === 'running') {
+      for (const faction of Object.values(FACTIONS)) {
+        delete faction.priorityFighter;
+        if (faction.priorityAircraft) faction.priorityAircraft=faction.priorityAircraft.filter(type=>type!=='fighter');
+      }
+      for (const airport of structures.filter(building=>building.type==='airport')) {
+        const active=airport.queue.filter(job=>job.type!=='fighter');
+        const cancelled=airport.queue.length-active.length;
+        if (!cancelled) continue;
+        airport.queue=active;
+        FACTIONS[airport.team].credits+=cancelled*PRODUCTS.fighter.cost;
+        log(factionName(airport.team)+'已取消待造的战斗机并返还生产费用。',airport.team);
+      }
+    }
   },
 })`);
 
@@ -41,7 +60,19 @@ let nextBuilding;
 let checkpointAt = 0;
 let lastTick = performance.now();
 let pending = 0;
+let journal;
+let roundArchived = false;
+let archiveRetryAt = 0;
+let startPending = false;
 const heardAt = new Map();
+
+function addLog(message, team, time, plan) {
+  const entry = { id:nextEvent++, message, team, time };
+  if (plan) entry.plan=plan;
+  logs.push(entry);
+  if (logs.length > 190) logs.shift();
+  journal.pending.push(entry);
+}
 
 function initialise(description, saved = null) {
   match = description;
@@ -51,6 +82,12 @@ function initialise(description, saved = null) {
   nextBuilding = saved?.nextBuilding ?? 1;
   pending = 0;
   lastTick = performance.now();
+  roundArchived = false;
+  archiveRetryAt = 0;
+  startPending = false;
+  journal = { offsets:saved?.journal?.offsets ?? {player:0,enemy:0},
+    complete:saved?.journal?.complete ?? !saved,
+    pending:saved && !saved.journal ? logs.slice() : [] };
   heardAt.clear();
   const context = vm.createContext({
     AbortSignal,
@@ -58,10 +95,7 @@ function initialise(description, saved = null) {
     matchEngine: {
       seed: match.seed,
       planner: Boolean(plannerOrigin),
-      log(message, team, time) {
-        logs.push({ id: nextEvent++, message, team, time });
-        if (logs.length > 190) logs.shift();
-      },
+      log:addLog,
       sound(cue, point, source) {
         const audience = Object.values(engine.FACTIONS).filter(faction =>
           faction.team === source.team || faction.sight.has(engine.tileUnder(point.x, point.y)))
@@ -85,31 +119,72 @@ function initialise(description, saved = null) {
   if (saved) engine.restore(saved);
 }
 
-function freshMatch(status) {
-  return { id: randomUUID(), seed: randomInt(0x100000000), status };
+function freshMatch(status, round, previousSeed = null) {
+  const chosen=randomInt(previousSeed===null?0x100000000:0xffffffff);
+  const seed=previousSeed!==null && chosen>=previousSeed?chosen+1:chosen;
+  return { id:randomUUID(), seed, status, round, auto:true,
+    startedAt:status==='running'?Date.now():null, finishedAt:null, nextRoundAt:null };
 }
 
 function save() {
-  const { game, FACTIONS, units, structures, searchSites, deposits, oreReserves, recoveringOre } = engine;
+  const { game, FACTIONS, units, structures, searchSites, deposits, oreReserves, recoveringOre, groundImpacts } = engine;
+  const offsets = history.append(match.id,journal.offsets,journal.pending);
   const state = {
     version, match, logs, nextEvent, nextBuilding, units, structures, searchSites, deposits, oreReserves, recoveringOre,
     factions: FACTIONS,
+    groundImpacts,
     nextUnitId: engine.nextId(),
     game: { time: game.time, outcome: game.outcome, firstEngagement: game.firstEngagement },
+    journal:{ offsets, complete:journal.complete },
   };
-  const temporary = checkpointFile + '.tmp';
-  fs.writeFileSync(temporary, v8.serialize(state), { mode: 0o600 });
-  fs.renameSync(temporary, checkpointFile);
+  replaceFile(checkpointFile,v8.serialize(state));
+  journal.offsets=offsets;
+  journal.pending=[];
   checkpointAt = performance.now();
 }
 
 function saveSafely() {
   try {
     save();
+    return true;
   } catch (error) {
     console.error('Match checkpoint failed:', error.message);
     checkpointAt = performance.now();
+    return false;
   }
+}
+
+function archiveRound() {
+  if (roundArchived) return true;
+  if (!saveSafely()) return false;
+  try {
+    const survivors = Object.fromEntries(['player','enemy'].map(team=>[team,{
+      units:engine.units.reduce((total,unit)=>total+(unit.team===team && unit.health>0 ?
+        1+(unit.passengers?.length??0) : 0),0),
+      buildings:engine.structures.filter(building=>building.team===team && building.health>0).length,
+    }]));
+    history.finish(matchInfo(),journal.complete,survivors);
+    roundArchived=true;
+  } catch (error) {
+    console.error('Battle archive failed:',error.message);
+  }
+  return roundArchived;
+}
+
+function startRound() {
+  if (['finished','ended'].includes(match.status) && !archiveRound()) return;
+  const experience=history.experience();
+  const round=match.round+Number(match.status!=='idle');
+  initialise(freshMatch('running',round,match.seed));
+  addLog('第 '+round+' 局开始。双方开始部署与侦察。',null,0);
+  for (const [team,review] of Object.entries(experience)) {
+    engine.FACTIONS[team].experience=review;
+    if (!review.sample) continue;
+    const name=team==='player'?'蓝方':'红方';
+    addLog(name+'复习最近 '+review.sample+' 局（'+review.wins+' 胜 '+review.losses+' 负 '+review.draws+' 平）。本局重点：'+
+      review.focus.map(task=>labels[task]).join('、')+'。',team,0);
+  }
+  startPending=!saveSafely();
 }
 
 function entityId(entity) {
@@ -145,10 +220,12 @@ function observation(team) {
     if (engine.oreCapacity(x,y)) ore.push([x,y,engine.amountAt(x,y)]);
   }
   const plan = view.commander.plan;
+  const review = view.experience;
   const strategy = {
     ...pick(view, ['credits','power','support','factoryCount','factoryBonus','strategy','orders']),
     orders: pick(view.orders, ['mode','task','source']),
     research: view.research ? pick(view.research, ['program','remaining']) : null,
+    experience:review ? pick(review,['sample','wins','losses','draws','last','focus']) : null,
     manufacturing: view.manufacturing ? pick(view.manufacturing, ['id','remaining']) : null,
     discoveries: [...view.discoveries],
     equipment: [...view.equipment],
@@ -163,6 +240,7 @@ function observation(team) {
         ? pick(unit.goal, ['x','y','kind']) : null,
       route: unit.team === team ? unit.route : [],
       passengerCount: unit.team === team && unit.passengers ? unit.passengers.length : null,
+      serviceActive: unit.team === team && Boolean(unit.serviceDepot),
       attackId: visibleId(unit.attackTarget), captureId: visibleId(unit.captureTarget), scentId: visibleId(unit.scentTarget),
     })),
     buildings: seenBuildings.map(building => ({
@@ -170,6 +248,8 @@ function observation(team) {
       queue: building.team === team ? building.queue : [],
       rally: building.team === team ? building.rally : null,
       repair: building.team === team ? building.repair : null,
+      serviceStatus: building.team === team && building.type === 'repairDepot' && building.serviceTank?.health>0
+        ? building.serviceTank.mode==='garage-repair'?'坦克维修中':'正在接收或放行坦克' : null,
     })),
     logs: logs.filter(entry => !entry.team || entry.team === team).slice(-64),
     sounds: events.filter(event => event.audience.includes(team) && event.time + 1 > engine.game.time)
@@ -177,6 +257,8 @@ function observation(team) {
     shots: engine.shots.filter(shot => shot.witnesses.includes(team)),
     wrecks: engine.wrecks.filter(wreck => wreck.witnesses.includes(team)),
     dust: engine.movementDust.filter(dust => view.sight.has(engine.tileUnder(dust.x,dust.y))),
+    impacts: engine.groundImpacts.filter(mark=>mark.witnesses.includes(team))
+      .map(({x,y,radius,time})=>({x,y,radius,time})),
   };
 }
 
@@ -184,7 +266,19 @@ function tick() {
   const clock = performance.now();
   const elapsed = Math.min(.20, (clock - lastTick) / 1000);
   lastTick = clock;
-  if (match.status !== 'running') return;
+  if (startPending) {
+    if (clock-checkpointAt>1000) startPending=!saveSafely();
+    return;
+  }
+  if (match.status !== 'running') {
+    if (match.status==='idle' && match.auto) startRound();
+    if (['finished','ended'].includes(match.status) && !roundArchived && clock>=archiveRetryAt) {
+      archiveRetryAt=clock+1000;
+      archiveRound();
+    }
+    if (match.status==='finished' && match.auto && roundArchived && Date.now()>=match.nextRoundAt) startRound();
+    return;
+  }
   pending += elapsed;
   while (pending >= step && !engine.game.outcome) {
     engine.stepSimulation(step);
@@ -192,7 +286,11 @@ function tick() {
   }
   if (engine.game.outcome) {
     match.status = 'finished';
-    saveSafely();
+    match.finishedAt=Date.now();
+    match.nextRoundAt=match.auto?match.finishedAt+roundDelay:null;
+    const result={player:'蓝方获胜。',enemy:'红方获胜。',draw:'双方战成平局。'};
+    addLog(result[engine.game.outcome],null,engine.game.time);
+    archiveRound();
   } else if (clock - checkpointAt > 4500) {
     saveSafely();
   }
@@ -203,19 +301,23 @@ function command(request) {
   switch (request.action) {
     case 'status': return matchInfo();
     case 'snapshot': return observation(request.team);
+    case 'history': return history.list(request.team,request.before);
+    case 'historyLog': {
+      const round=history.get(request.round);
+      return round?history.logFile(round.id,request.team):null;
+    }
     case 'start':
-      if (match.status !== 'running') {
-        initialise(freshMatch('running'));
-        logs.push({ id: nextEvent++, message:'双方开始部署与侦察。', team:null, time:0 });
-        saveSafely();
-      }
+      if (match.status !== 'running') startRound();
       return matchInfo();
     case 'end':
+      match.auto=false;
+      match.nextRoundAt=null;
       if (match.status === 'running') {
         match.status = 'ended';
-        logs.push({ id: nextEvent++, message:'对局已结束。', team:null, time:engine.game.time });
-        saveSafely();
-      }
+        match.finishedAt=Date.now();
+        addLog('对局由观战者结束。',null,engine.game.time);
+        archiveRound();
+      } else saveSafely();
       return matchInfo();
     case 'shutdown':
       clearInterval(timer);
@@ -225,14 +327,19 @@ function command(request) {
   }
 }
 
-fs.mkdirSync(path.dirname(checkpointFile), { recursive: true, mode: 0o700 });
 try {
   const saved = v8.deserialize(fs.readFileSync(checkpointFile));
   if (saved.version !== version) throw new Error('Unsupported checkpoint version');
-  initialise(saved.match, saved);
+  const match=saved.match;
+  match.round??=history.latestRound()+1;
+  match.auto??=match.status!=='ended';
+  match.startedAt??=null;
+  match.finishedAt??=null;
+  match.nextRoundAt??=match.auto && match.status==='finished'?Date.now()+roundDelay:null;
+  initialise(match, saved);
 } catch (error) {
   if (error.code !== 'ENOENT') console.error('Cannot restore match:', error.message);
-  initialise(freshMatch('idle'));
+  initialise(freshMatch('idle',history.latestRound()+1));
 }
 
 const timer = setInterval(tick, 32);
