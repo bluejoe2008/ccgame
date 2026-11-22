@@ -231,7 +231,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=footfall';
+  script.src = 'game.js?v=unit-ranks';
   document.head.append(script);
 }
 bootObserver();

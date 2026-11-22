@@ -38,6 +38,8 @@ const OPENING_SCOUT_WINDOW=100;
 const BASE_DEFENSE_RADIUS=12;
 const CRITICAL_RAID_TARGETS=new Set(['yard','mcv','factory','refinery','barracks','airport','solar','diesel']);
 const EMERGENCY_DEFENSE_TYPES=new Set(['turret','laser']);
+const MAX_UNIT_RANK=3;
+const RANK_DAMAGE_BONUS=.15;
 const REFINERY_PAD = {x:-.85,y:-1.40,width:3.92,height:3.70};
 const OIL_FIELD = {label:'油田',width:2,height:2,roof:82,body:66,health:350,color:'#d4aa72',powerUse:12};
 const MAP_SEED=globalThis.matchEngine?.seed??globalThis.matchBootstrap?.seed??
@@ -2842,6 +2844,7 @@ function runOverInfantry(vehicle,fromX,fromY,radius) {
     if (segmentDistanceSquared(unit.x-fromX,unit.y-fromY,dx,dy)>contact*contact) continue;
     unit.health=0;
     unit.runOver=true;
+    promoteAfterKill(vehicle);
     recordRaid(vehicle,unit);
   }
 }
@@ -3626,7 +3629,7 @@ function scoutBattlefield(faction) {
 
 function combatPower(unit,own=false) {
   const weapon=WEAPONS[unit.type];
-  const ranged=weapon.damage/weapon.reload*Math.sqrt(weapon.range);
+  const ranged=weaponDamage(unit,weapon)/weapon.reload*Math.sqrt(weapon.range);
   const role=unit.type==='dog'?.64:weapon.splash?1.24:1;
   const support=own?FACTIONS[unit.team].support.damage*FACTIONS[unit.team].support.fireRate:1;
   const effectiveHealth=weapon.health/(1-weapon.defense);
@@ -4566,11 +4569,23 @@ function damageAfterDefense(target,damage) {
   return Math.max(1,Math.round(damage*(1-defenseOf(target))));
 }
 
+function weaponDamage(unit,weapon) {
+  return weapon.damage*(1+(unit.rank??0)*RANK_DAMAGE_BONUS);
+}
+
+function promoteAfterKill(unit) {
+  const rank=unit.rank??0;
+  if (unit.health<=0 || unit.width || !WEAPONS[unit.type] || rank>=MAX_UNIT_RANK) return;
+  unit.rank=rank+1;
+  log(factionName(unit.team)+unit.label+'晋升至 '+unit.rank+' 级，攻击力 +'+
+    Math.round(unit.rank*RANK_DAMAGE_BONUS*100)+'%。',unit.team);
+}
+
 function fireWeapon(attacker,from,weapon,target,hits) {
   if (game.time<(attacker.nextShot??0)) return;
   const faction=FACTIONS[attacker.team];
   const efficiency=attacker.width?faction.power.rate:faction.support.fireRate;
-  const damageBonus=attacker.width?1:faction.support.damage;
+  const damage=weaponDamage(attacker,weapon)*(attacker.width?1:faction.support.damage);
   attacker.nextShot=game.time+weapon.reload/efficiency;
   const point=targetPoint(from,target);
   const effect=weapon.effect??(attacker.type==='tank' || attacker.type==='dog'?attacker.type:'bullet');
@@ -4597,14 +4612,14 @@ function fireWeapon(attacker,from,weapon,target,hits) {
     }
   }
   const multiplier=armoredTarget(target)?(weapon.armorFactor??(effect==='dog'?1/3:1)):(weapon.softFactor??1);
-  hits.push({target,attacker,damage:damageAfterDefense(target,weapon.damage*multiplier*damageBonus)});
+  hits.push({target,attacker,damage:damageAfterDefense(target,damage*multiplier)});
   if (weapon.splash) {
     for (const other of [...units,...structures]) {
       if (other===target || other.team===attacker.team || other.team==='neutral' || other.health<=0 ||
           isAirborne(other)!==isAirborne(target)) continue;
       const distance=distanceTo(point,targetPoint(point,other));
       if (distance>weapon.splash) continue;
-      const splash=weapon.damage*damageBonus*(.68-.33*distance/weapon.splash);
+      const splash=damage*(.68-.33*distance/weapon.splash);
       hits.push({target:other,attacker,damage:damageAfterDefense(other,splash)});
     }
   }
@@ -4670,11 +4685,15 @@ function advanceCombat(dt=.04) {
     log('战斗已开始。');
     notice('战斗已开始');
   }
+  const creditedKills=[];
   for (const {target,damage,attacker} of hits) {
+    if (target.health<=0) continue;
     target.health-=damage;
     if (target.width) target.lastDamageTime=game.time;
     if (damage>0) recordRaid(attacker,target);
+    if (target.health<=0 && target.team!=='neutral' && target.team!==attacker.team) creditedKills.push(attacker);
   }
+  for (const unit of creditedKills) promoteAfterKill(unit);
   let buildingsDestroyed=false;
   const priorPower=new Map();
   for (const list of [units,structures]) {
@@ -4779,6 +4798,11 @@ function drawUnitStatus(unit) {
   }
   if (hp && (unit.team==='enemy' || unit.health<hp || game.selection.includes(unit))) {
     drawHealth({x:point.x,y:point.y-7},unit,hp,UNIT_ART[unit.type].small?19:27);
+  }
+  const rank=unit.rank??0;
+  for (let i=0;i<rank;i++) {
+    const x=point.x+(i-(rank-1)/2)*7,y=point.y-13;
+    shape(ctx,[[x-3,y],[x,y-4],[x+3,y],[x+3,y+2],[x,y-2],[x-3,y+2]],'#ffda82','#423620',.8);
   }
 }
 
@@ -5054,7 +5078,8 @@ function syncHud() {
   }
   const building=game.selectedBuilding;
   const count=game.selection.length;
-  byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label : count ? '已选 '+count+' 个单位' :
+  const rank=unit?.rank?' · '+unit.rank+' 级':'';
+  byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label+rank : count ? '已选 '+count+' 个单位' :
     building ? buildingSpec(building.type).label : '未选择单位';
   unitMenu.hidden=!count;
   syncUnitStats(unit);
@@ -5103,7 +5128,8 @@ function syncUnitStats(unit) {
   const cost=product.cost+(horse?.cost??0);
   const time=product.time+(horse?.time??0);
   byId('unit-health').textContent=Math.ceil(unit.health)+' / '+maxHealth;
-  byId('unit-attack').textContent=weapon?.damage??'—';
+  const bonus=unit.rank?' (+'+Math.round(unit.rank*RANK_DAMAGE_BONUS*100)+'%)':'';
+  byId('unit-attack').textContent=weapon?Number(weaponDamage(unit,weapon).toFixed(1))+bonus:'—';
   byId('unit-defense').textContent=Math.round(defenseOf(unit)*100)+'%';
   byId('unit-speed').textContent=unit.speed+' 格/秒';
   byId('unit-cost').textContent=cost.toLocaleString('zh-CN');
