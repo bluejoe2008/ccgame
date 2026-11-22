@@ -20,7 +20,7 @@ const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
 
 const interfaceScript = new vm.Script(`({
   game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites,
-  shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, oreCapacity, amountAt, tileUnder,
+  shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, oreCapacity, amountAt, tileUnder, finalizeOilOperations,
   nextId() { return nextUnitId; },
   restore(saved) {
     for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
@@ -76,9 +76,10 @@ function stylePreferences(saved) {
   }));
 }
 
-function addLog(message, team, time, plan) {
+function addLog(message, team, time, plan, metrics) {
   const entry = { id:nextEvent++, message, team, time };
   if (plan) entry.plan=plan;
+  if (metrics) entry.metrics=metrics;
   logs.push(entry);
   if (logs.length > 190) logs.shift();
   journal.pending.push(entry);
@@ -172,6 +173,7 @@ function saveSafely() {
 
 function archiveRound() {
   if (roundArchived) return true;
+  engine.finalizeOilOperations();
   if (!saveSafely()) return false;
   try {
     const survivors = Object.fromEntries(['player','enemy'].map(team=>[team,{

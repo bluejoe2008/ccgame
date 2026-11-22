@@ -7,9 +7,9 @@
   <title>Command&amp;Conquer</title>
   <link rel="stylesheet" href="style.css?v=building-themes">
   <script src="audio.js?v=laser-mix" defer></script>
-  <script src="commander.js?v=battle-history" defer></script>
-  <script src="building-themes.js?v=1" defer></script>
-  <script src="observer.js?v=building-themes" defer></script>
+  <script src="commander.js?v=training" defer></script>
+  <script src="building-themes.js?v=2" defer></script>
+  <script src="observer.js?v=training" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -69,6 +69,7 @@
             <div class="tech-panel" id="tech-panel">
               <section><h3>蓝方</h3><p id="blue-research"></p><ul id="blue-tech"></ul></section>
               <section><h3>红方</h3><p id="red-research"></p><ul id="red-tech"></ul></section>
+              <section><button id="open-drills" type="button" class="metal-button">场景操练</button></section>
             </div>
           </details>
           <details class="log-block">
@@ -132,6 +133,27 @@
       </div>
     </section>
   </main>
+
+  <dialog id="training-drills" aria-labelledby="drill-title">
+    <form method="dialog">
+      <header><h2 id="drill-title">场景操练</h2><button type="submit" class="metal-button">关闭</button></header>
+    </form>
+    <section class="history-panel">
+      <form id="drill-form" class="history-controls">
+        <label for="drill-select">操练项目</label>
+        <select id="drill-select" name="drill">
+          <option value="all">全部项目</option>
+          <option value="scout">改线侦察</option>
+          <option value="probe">小队试探</option>
+          <option value="relief">受袭回援</option>
+          <option value="oil">争夺油田</option>
+        </select>
+        <button id="run-drill" type="submit" class="metal-button">开始操练</button>
+      </form>
+      <p id="drill-status" role="status">红蓝方分别执行同一任务，按用时、兵力和收支评分。</p>
+      <ul id="drill-results" hidden></ul>
+    </section>
+  </dialog>
 
   <dialog id="battle-history" aria-labelledby="history-title">
     <form method="dialog">

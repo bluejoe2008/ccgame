@@ -131,6 +131,48 @@ function updateHistoryReview() {
   }
 }
 
+async function runTrainingDrills(event) {
+  event.preventDefault();
+  const button=byId('run-drill');
+  if (button.disabled) return;
+  const status=byId('drill-status'),list=byId('drill-results');
+  const select=byId('drill-select');
+  button.disabled=select.disabled=true;
+  list.replaceChildren();
+  list.hidden=true;
+  status.textContent='红蓝方正在操练。';
+  try {
+    const response=await fetch('/api/training/drills',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({drill:select.value}),signal:AbortSignal.timeout(18000),
+    });
+    if (response.status===429) {
+      status.textContent='另一组操练正在运行，请稍后重试。';
+      return;
+    }
+    if (!response.ok) throw new Error('Drills request failed');
+    const {results}=await response.json();
+    const names={scout:'改线侦察',probe:'小队试探',relief:'受袭回援',oil:'争夺油田'};
+    const detail={
+      scout:row=>'回报 '+(row.secondsToReport??'—')+' 秒，前线 '+row.frontlineOnContact+'，守军 '+row.reserveHeld,
+      probe:row=>'用时 '+row.secondsToObjective+' 秒，出动 '+row.committed+'，守军 '+row.reserveHeld,
+      relief:row=>'转入防御，回援 '+row.responders+' 个单位',
+      oil:row=>'持有 '+row.heldSeconds+' 秒，入账 '+row.income+'，投入 '+row.cost,
+    };
+    for (const row of results) {
+      const item=document.createElement('li');
+      item.textContent=factionName(row.team)+' · '+names[row.drill]+' · '+(row.passed?'达标':'待练')+' · '+detail[row.drill](row);
+      list.append(item);
+    }
+    list.hidden=false;
+    status.textContent=results.filter(row=>row.passed).length+' / '+results.length+' 次达标。';
+  } catch {
+    status.textContent='操练结果暂未返回，请重试。';
+  } finally {
+    button.disabled=select.disabled=false;
+  }
+}
+
 async function loadBattleHistory({older=false,selected=0}={}) {
   const request=++historyRequest;
   const team=game.perspective;
@@ -365,6 +407,8 @@ function attachObserver(snapshot) {
   byId('start-session').addEventListener('click',()=>controlMatch('start'));
   byId('end-session').addEventListener('click',()=>controlMatch('end'));
   byId('open-history').addEventListener('click',()=>openBattleHistory());
+  byId('open-drills').addEventListener('click',()=>byId('training-drills').showModal());
+  byId('drill-form').addEventListener('submit',runTrainingDrills);
   byId('history-round').addEventListener('change',updateHistoryReview);
   byId('history-older').addEventListener('click',()=>loadBattleHistory({older:true}));
   byId('battle-history').addEventListener('close',()=>{
@@ -388,7 +432,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=building-themes';
+  script.src = 'game.js?v=training';
   document.head.append(script);
 }
 bootObserver();

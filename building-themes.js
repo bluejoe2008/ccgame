@@ -4,8 +4,6 @@ const DEFAULT_BUILDING_THEME='mountain';
 const RANDOM_BUILDING_THEME='random';
 const BUILDING_WIDTHS={yard:205,refinery:232,factory:205,repairDepot:188,barracks:163,airport:270,
   oil:148,sentry:82,turret:157,bunker:155,wall:56,laser:132,solar:147,diesel:199,recreation:152,training:201};
-const RETRO_BUILDINGS=new Set(['yard','barracks','refinery','factory','solar','diesel','airport','laser']);
-
 const CLASSIC_LIGHTS={
   yard:[[.455,.522],[.642,.459],[.689,.451]], factory:[[.59,.548],[.77,.434]],
   repairDepot:[[.645,.46]], refinery:[[.46,.69]], barracks:[[.567,.028],[.176,.621],[.449,.733]],
@@ -20,27 +18,6 @@ const BUILDING_THEMES={
     laser:{aspect:300/324,emitter:[.68,.25]}, lights:CLASSIC_LIGHTS,
     stacks:{diesel:[[.80,.05],[.87,.02]],refinery:[[.395,.04]]},
     rotors:{oil:[.567,.593]},
-  },
-  retro:{
-    label:'红警复古', prefix:'retro-', widths:{}, repairMark:[.53,.79],
-    laser:{aspect:300/250,emitter:[.27,.23]},
-    lights:{...CLASSIC_LIGHTS,refinery:[[.453,.461]],diesel:[[.152,.348],[.286,.427],[.432,.502]],
-      airport:[[.246,.149],[.352,.915],[.489,.856],[.636,.790],[.787,.717],[.890,.651]]},
-    stacks:{diesel:[[.227,.035],[.365,.109],[.51,.20]],refinery:[[.234,.072],[.348,.025]]},
-    rotors:{oil:[.567,.593],diesel:[.269,.536]},
-  },
-  jiangnan:{
-    label:'江南灰瓦', prefix:'jiangnan-', widths:{bunker:128,recreation:116},
-    laser:{aspect:420/262,emitter:[.51,.20]},
-    lights:{
-      yard:[[.34,.61],[.43,.62],[.94,.13]], factory:[[.31,.57],[.44,.61],[.57,.64]],
-      repairDepot:[[.72,.49],[.66,.53]], refinery:[[.48,.55],[.86,.68]], barracks:[[.32,.34],[.50,.36],[.72,.40]],
-      airport:[[.79,.16],[.06,.91],[.13,.82],[.21,.73],[.56,.92],[.61,.83],[.66,.74]],
-      solar:[[.65,.25]], diesel:[[.40,.72],[.53,.73],[.65,.71]], oil:[[.82,.65]],
-      sentry:[[.46,.35]], turret:[[.42,.07]], bunker:[[.57,.50]], recreation:[[.42,.66],[.62,.72]], training:[[.51,.80]],
-    },
-    stacks:{diesel:[[.16,.056],[.25,.023]],refinery:[[.18,.018],[.27,.067]]},
-    rotors:{oil:[.47,.52],diesel:[.54,.74]},
   },
   mountain:{
     label:'红军年代', prefix:'mountain-',
@@ -74,9 +51,7 @@ function buildingThemeAsset(id,type,tint,axis) {
   if (tint==='neutral') return 'mountain-oil-neutral';
   const theme=BUILDING_THEMES[id];
   const variant=type==='wall'?'wall-'+(axis==='y'?'y':'x'):theme.repairMark && type==='repairDepot'?'yard':type;
-  const prefix=id==='retro' && !RETRO_BUILDINGS.has(variant)?'':theme.prefix;
-  const sharedWall=id==='jiangnan' && type==='wall';
-  return prefix+variant+(sharedWall?'':'-'+tint);
+  return theme.prefix+variant+'-'+tint;
 }
 
 if (typeof module!=='undefined') {

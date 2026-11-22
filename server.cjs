@@ -11,6 +11,7 @@ const { Worker } = require('node:worker_threads');
 const { pipeline } = require('node:stream/promises');
 const { findCodex, chooseWithCodex, validObservation } = require('./game-planner.cjs');
 const { validBuildingThemePreference } = require('./building-themes.js');
+const { drills, runDrills } = require('./training.cjs');
 
 const compress = promisify(gzip);
 const root = __dirname;
@@ -35,6 +36,7 @@ let nextRequest = 0;
 let worker;
 let codex;
 let plannerBusy = false;
+let drillsRunning = false;
 let nextStrategy = 0;
 let stopping = false;
 
@@ -176,6 +178,14 @@ async function serve(request,response) {
       const state=await matchCall('building-style',{team:selection.team,preference:selection.preference,
         current:request.headers['x-match-id']});
       return state?send(200,state):send(409,{error:'match_changed'});
+    }
+    if (url.pathname==='/api/training/drills') {
+      const selection=await readJson(request);
+      if (selection?.drill!=='all' && !drills.includes(selection?.drill)) return send(400,{error:'invalid_drill'});
+      if (drillsRunning) return send(429,{error:'drills_running'});
+      drillsRunning=true;
+      try { return send(200,{results:await runDrills(selection.drill==='all'?drills:[selection.drill])}); }
+      finally { drillsRunning=false; }
     }
     if (url.pathname==='/api/strategy') {
       const snapshot=await readJson(request);

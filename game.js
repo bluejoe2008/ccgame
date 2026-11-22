@@ -621,9 +621,9 @@ function refreshVision(faction,members,buildings) {
   }
 }
 
-function log(message,team=null,loggedTime=game.time,plan=null) {
+function log(message,team=null,loggedTime=game.time,plan=null,metrics=null) {
   if (ENGINE_ONLY) {
-    matchEngine.log(message,team,loggedTime,plan);
+    matchEngine.log(message,team,loggedTime,plan,metrics);
     return;
   }
   const entry = document.createElement('li');
@@ -906,7 +906,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=building-themes');
+      const worker=new Worker('terrain-worker.js?v=training');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -3115,7 +3115,7 @@ function arrive(unit) {
       if (index>=0) units.splice(index,1);
       unit.health=0;
       if (game.selection.includes(unit)) select(game.selection.filter(member=>member!==unit));
-      captureBuilding(field,unit.team);
+      captureBuilding(field,unit.team,unit.oilMission);
     }
   } else if (goal.kind==='mine' && amountAt(goal.x,goal.y)>0) {
     unit.mode='mining';
@@ -4013,14 +4013,43 @@ function orderCapture(engineer,building) {
         unitPositionBlocked(engineer,cell.x,cell.y)) continue;
     const path=findPath(cell,engineer);
     if (!path) continue;
+    const faction=FACTIONS[engineer.team];
+    const plan=faction.commander.plan;
+    engineer.oilMission=building.type==='oil'?{
+      team:engineer.team,target:building,kind:building.team==='neutral'?'neutral_oil':'hostile_oil',
+      point:yardCenter(building),launchedAt:game.time,income:0,escort:plan?.target===building?plan.scout??null:null,
+    }:null;
     engineer.captureTarget=building;
     return setCourse(cell,'capture',engineer,path);
   }
   return false;
 }
 
-function captureBuilding(building,team) {
+function closeOilMission(mission,result) {
+  if (!mission) return;
+  const escortLost=mission.escort?.health<=0 && (!mission.point || distanceTo(mission.escort,mission.point)<=8);
+  const cost=PRODUCTS.engineer.cost+(escortLost?(PRODUCTS[mission.escort.type]?.cost??0):0);
+  const transit=Math.floor((mission.capturedAt??game.time)-mission.launchedAt);
+  const held=mission.capturedAt===undefined?0:Math.floor(game.time-mission.capturedAt);
+  const metrics={kind:'oil',targetKind:mission.kind,result,transit,held,income:mission.income,cost,
+    escorts:mission.escort?1:0,escortLost:escortLost?1:0};
+  log(factionName(mission.team)+'油田行动：'+(result==='failed'?'工程师未能抵达。':'持有 '+held+' 秒。')+
+    '入账 '+mission.income+'，工程师及已确认的护卫损失 '+cost+'。',mission.team,game.time,null,metrics);
+}
+
+function closeOilHolding(field,result) {
+  if (!field.oilOperation) return;
+  closeOilMission(field.oilOperation,result);
+  delete field.oilOperation;
+}
+
+function finalizeOilOperations() {
+  for (const field of structures) if (field.type==='oil') closeOilHolding(field,'round_end');
+}
+
+function captureBuilding(building,team,mission) {
   const previous=building.team;
+  closeOilHolding(building,'lost');
   building.team=team;
   building.repair=null;
   building.queue.length=0;
@@ -4030,6 +4059,10 @@ function captureBuilding(building,team) {
   if (firstOil) {
     building.firstCapturePaid=true;
     FACTIONS[team].credits+=OIL_CAPTURE_BONUS;
+  }
+  if (building.type==='oil' && mission?.target===building) {
+    const {target,...operation}=mission;
+    building.oilOperation={...operation,capturedAt:game.time,income:firstOil?OIL_CAPTURE_BONUS:0};
   }
   const center=yardCenter(building);
   reveal(FACTIONS[team],center.x,center.y,building.remaining?2.6:5);
@@ -4053,6 +4086,7 @@ function advanceOilFields() {
     field.nextPayout+=OIL_INTERVAL;
     const account=treasury(field.team);
     const income=Math.round(OIL_INCOME*incomeMultiplier(field.team,'oil')*account.power.rate);
+    if (field.oilOperation) field.oilOperation.income+=income;
     account.credits+=income;
     incomes[field.team]+=income;
     if (structureVisible(field)) playAt('cash',yardCenter(field),field);
@@ -4622,7 +4656,19 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
     if (unit.goal?.kind==='reinforce') clearAttackOrder(unit);
     unit.rescueTarget=null;
   }
-  const scout=dispatchOpeningScout(faction,available,intelligence,raid);
+  const plan=faction.commander.plan;
+  const maneuverScout=plan?.maneuver && plan.task==='recon';
+  let scout=dispatchOpeningScout(faction,available,intelligence,raid);
+  if (maneuverScout && !raid?.critical) {
+    if (available.includes(plan.scout)) scout=plan.scout;
+    else {
+      const candidates=available.filter(unit=>!plan.reserve.includes(unit) && !unit.engaged &&
+        unit.goal?.kind!=='mount').sort((a,b)=>Number(isFastScout(b))-Number(isFastScout(a)) ||
+          distanceTo(a,plan.point)/a.speed-distanceTo(b,plan.point)/b.speed);
+      scout=candidates.find(unit=>sendScout(unit,plan.target,'scout'))??null;
+      plan.scout=scout;
+    }
+  }
   const remaining=available.filter(unit=>unit!==scout);
   if (faction.orders.mode!=='assault') {
     for (const unit of remaining) {
@@ -4631,7 +4677,6 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
         unit.staging=false;
       }
     }
-    const plan=faction.commander.plan;
     if (!scout && faction.orders.mode==='develop' && plan?.task==='recon' && !available.includes(plan.scout) &&
         !(plan.scout?.type==='reconPlane' && units.includes(plan.scout))) {
       plan.scout=dispatchScouts(faction,remaining,plan.target,'scout');
@@ -4644,13 +4689,17 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
     stageArmy(remaining,buildings,true);
     return;
   }
-  const plan=faction.commander.plan;
   const objective=faction.orders.task;
   const home=buildings.find(building=>building.type==='yard')??buildings.find(building=>CRITICAL_RAID_TARGETS.has(building.type));
   const preferred=contacts.includes(faction.orders.target)?faction.orders.target:null;
   let attackers=remaining;
   const offensive=objective==='strike' || objective==='harass' || objective==='advance';
-  if (home && scout && offensive && remaining.length<2) {
+  if (maneuverScout) {
+    attackers=remaining.filter(unit=>!plan.reserve.includes(unit));
+  } else if (objective==='harass' && plan?.maneuver) {
+    attackers=remaining.filter(unit=>plan.detachment.includes(unit));
+    if (plan.reserve.filter(unit=>remaining.includes(unit)).length<2) attackers=[];
+  } else if (home && scout && offensive && remaining.length<2) {
     attackers=[];
   } else if (home && offensive && remaining.length>=2) {
     const center=yardCenter(home);
@@ -5701,6 +5750,8 @@ function advanceCombat(dt=.04) {
     for (let i=list.length-1;i>=0;i--) {
       const target=list[i];
       if (!(target.health<=0)) continue;
+      if (target.type==='oil') closeOilHolding(target,'lost');
+      if (target.oilMission && target.captureTarget===target.oilMission.target) closeOilMission(target.oilMission,'failed');
       list.splice(i,1);
       if (list===structures) {
         buildingsDestroyed=true;
@@ -6442,7 +6493,7 @@ document.addEventListener('fullscreenchange',()=>{
   byId('fullscreen').querySelector('.header-label').textContent=document.fullscreenElement?'退出全屏':'全屏';
 });
 document.addEventListener('keydown',event=>{
-  if (byId('help').open || event.altKey || event.ctrlKey || event.metaKey ||
+  if (byId('help').open || byId('training-drills').open || event.altKey || event.ctrlKey || event.metaKey ||
       event.target.closest?.('select')) return;
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
     event.preventDefault();

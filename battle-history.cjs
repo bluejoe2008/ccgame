@@ -22,6 +22,8 @@ function review(match, team, logs, remaining) {
   const name = team === 'player' ? '蓝方' : '红方';
   let oil = 0, yardLosses = 0, firstPowerDrop = null, events = 0;
   const plans = new Map();
+  const oilOperations = {};
+  let turns=0, probingSuccesses=0;
   for (const line of logs.split('\n')) {
     if (!line) continue;
     const entry = JSON.parse(line);
@@ -33,6 +35,18 @@ function review(match, team, logs, remaining) {
     const powerDrop = /^电厂被毁，供电降至 (\d+)%/.exec(entry.message.slice(name.length));
     if (entry.message.startsWith(name) && powerDrop && firstPowerDrop === null) {
       firstPowerDrop = { time:entry.time, percent:Number(powerDrop[1]) };
+    }
+    const metrics=entry.metrics;
+    if (metrics?.kind==='turn') turns++;
+    if (metrics?.kind==='turn-result' && metrics.phase==='probe' && entry.plan?.result==='complete') probingSuccesses++;
+    if (metrics?.kind==='oil' && ['neutral_oil','hostile_oil'].includes(metrics.targetKind)) {
+      const tally=oilOperations[metrics.targetKind]??={attempts:0,paidBack:0,net:0,held:0};
+      if (metrics.result!=='round_end' || metrics.held>=30 || metrics.income>=metrics.cost) {
+        tally.attempts++;
+        tally.paidBack+=Number(metrics.income>=metrics.cost);
+        tally.net+=metrics.income-metrics.cost;
+        tally.held+=metrics.held;
+      }
     }
     const plan = entry.plan;
     if (!Object.hasOwn(labels, plan?.task)) continue;
@@ -53,6 +67,13 @@ function review(match, team, logs, remaining) {
   if (yardLosses) evidence.push('日志记录 '+yardLosses+' 次建造场损失。');
   if (best) evidence.push('「'+labels[best[0]]+'」完成 '+best[1].done+' 次，受阻或中断 '+best[1].failed+' 次。');
   if (worst) evidence.push('「'+labels[worst[0]]+'」受阻或中断 '+worst[1].failed+' 次，完成 '+worst[1].done+' 次。');
+  if (turns) evidence.push('反复拦截后调整任务 '+turns+' 次，小队试探完成目标 '+probingSuccesses+' 次。');
+  for (const [category,stats] of Object.entries(oilOperations)) {
+    if (!stats.attempts) continue;
+    const name=category==='neutral_oil'?'中立油田':'敌方油田';
+    evidence.push(name+'行动 '+stats.attempts+' 次，其中 '+stats.paidBack+' 次收入覆盖工程师及已记录的护卫损失，'
+      +'累计净入账 '+stats.net.toLocaleString('zh-CN')+' 储备。');
+  }
 
   const lessons = [];
   const add = (task, weight, reason) => {
@@ -74,7 +95,7 @@ function review(match, team, logs, remaining) {
     draw:'平局，优先修正可确认的弱点。',
     stopped:'人工结束，对局未分胜负。',
   };
-  return { result, summary:name+summaries[result], evidence, lessons, events };
+  return { result, summary:name+summaries[result], evidence, lessons, events, oilOperations };
 }
 
 function safeId(id) {
@@ -164,15 +185,24 @@ class BattleHistory {
     return Object.fromEntries(teams.map(team=>{
       const reviews = recent.map(round=>round.reviews[team]);
       const weights = {};
+      const oilObservations = {};
       for (const [i, result] of reviews.entries()) {
         for (const {task,weight} of result.lessons) {
           weights[task] = Math.min(27, (weights[task]??0) + Math.round(weight*.65**i));
         }
+        for (const [category,stats] of Object.entries(result.oilOperations??{})) {
+          const weight=.65**i;
+          const totals=oilObservations[category]??={attempts:0,paidBack:0};
+          totals.attempts+=stats.attempts*weight;
+          totals.paidBack+=stats.paidBack*weight;
+        }
       }
       const focus = Object.keys(weights).sort((a,b)=>weights[b]-weights[a]).slice(0,3);
+      const oilWeights=Object.fromEntries(Object.entries(oilObservations)
+        .map(([category,{attempts,paidBack}])=>[category,Math.round(12*(2*paidBack-attempts)/(attempts+2))]));
       return [team,{ sample:reviews.length, wins:reviews.filter(r=>r.result==='win').length,
         losses:reviews.filter(r=>r.result==='loss').length, draws:reviews.filter(r=>r.result==='draw').length,
-        last:reviews[0]?.result??null, focus, weights }];
+        last:reviews[0]?.result??null, focus, weights, oilWeights }];
     }));
   }
 }

@@ -17,9 +17,16 @@ const COMMAND_TASKS={
 };
 const COMMAND_RESULTS={complete:'已完成',stalled:'受阻',lost:'目标失去联系',interrupted:'因战况中断'};
 const CAMPAIGN_TASKS=new Set(['advance','strike','harass','intercept']);
+const PROBE_TARGETS=new Set(['factory','barracks','refinery','solar','diesel']);
 let commanderRequestInFlight=false;
 
+function usesTrainedPolicy(faction) {
+  return globalThis.matchEngine?.policies?.[faction.team]==='trained';
+}
+
 function commandLabel(plan) {
+  if (plan.maneuver && plan.task==='harass') return plan.kind==='power_plant'?'小队试探敌方电厂':'小队试探敌方生产设施';
+  if (plan.maneuver && plan.task==='recon') return '改线侦察';
   return plan.task==='strike' && plan.kind==='power_plant'?'打击敌方电厂':COMMAND_TASKS[plan.task].label;
 }
 
@@ -71,6 +78,41 @@ function campaignWaypoint(faction,home,army,frontier,threatNear) {
   return best;
 }
 
+function campaignManeuver(faction,army,home,battle) {
+  const campaign=faction.commander.campaign;
+  if (!campaign || campaign.intercepts.filter(time=>game.time-time<=75).length<3 ||
+      game.time<Math.max(135,campaign.nextTurn??0) || !home || battle.power<82 ||
+      battle.rivals.some(unit=>distanceTo(unit,home)<=BASE_DEFENSE_RADIUS+2) ||
+      battle.homeThreat>battle.ownPower*.22) return null;
+  const ground=army.filter(unit=>!isAirborne(unit) && unit.health>=WEAPONS[unit.type].health*.4);
+  const reserve=ground.filter(unit=>distanceTo(unit,home)<=11)
+    .sort((a,b)=>distanceTo(a,home)-distanceTo(b,home)).slice(0,Math.max(2,Math.ceil(ground.length*.38)));
+  if (reserve.length<2 || ground.length-reserve.length<2) return null;
+  const taskForce=ground.filter(unit=>!reserve.includes(unit) && unit.type!=='dog' &&
+    !unit.engaged && unit.goal?.kind!=='mount');
+  const targets=battle.hostileBuildings.filter(building=>PROBE_TARGETS.has(building.type) &&
+    (faction.commander.cooldowns.get(building)??0)<=game.time).map(target=>{
+    const point=yardCenter(target);
+    const danger=battle.threatNear(point);
+    return {target,point,danger,rank:distanceTo(home,point)*.35+danger*.6-
+      (BUILDINGS[target.type]?.powerOutput?12:0)};
+  }).sort((a,b)=>a.rank-b.rank);
+  for (const {target,point,danger} of targets.slice(0,2)) {
+    const detachment=taskForce.filter(unit=>distanceTo(unit,point)<=21)
+      .sort((a,b)=>distanceTo(a,point)/a.speed-distanceTo(b,point)/b.speed).slice(0,3);
+    if (detachment.length<2 || danger>detachment.reduce((sum,unit)=>sum+combatPower(unit,true),0)*.68) continue;
+    const lead=detachment[0];
+    const entry=perimeterTiles(target).filter(tile=>faction.explored.has(tileUnder(tile.x,tile.y)) &&
+      walkable(tile.x,tile.y)).sort((a,b)=>distanceTo(a,lead)-distanceTo(b,lead))[0];
+    if (!entry || !findPath(entry,lead)) continue;
+    return {task:'harass',target,key:target,point,
+      kind:BUILDINGS[target.type]?.powerOutput?'power_plant':'economy',score:135,
+      risk:danger?'medium':'low',distance:Math.round(distanceTo(home,point)),maneuver:true,detachment,reserve};
+  }
+  const scout=battle.options.find(option=>option.task==='recon' && option.risk!=='high' && option.distance>=8);
+  return scout?{...scout,score:126,maneuver:true,reserve}:null;
+}
+
 function observeBattle(faction,army,buildings,members,intelligence,raid) {
   const base=buildings.find(b=>b.type==='yard')??buildings.find(b=>b.type==='factory' || b.type==='barracks')??members[0];
   const home=base?.width?yardCenter(base):base;
@@ -79,10 +121,11 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
   const rivals=contacts.filter(unit=>!unit.width && WEAPONS[unit.type]);
   const hostileBuildings=contacts.filter(contact=>contact.width);
   for (const target of hostileBuildings) {
-    faction.commander.enemySites.set(target,yardCenter(target));
+    faction.commander.enemySites.set(target,{...yardCenter(target),seenAt:game.time});
   }
   for (const [target,point] of faction.commander.enemySites) {
     if (faction.commander.confirmedLosses.has(target) || buildings.includes(target) ||
+        (usesTrainedPolicy(faction) && game.time-(point.seenAt??game.time)>65) ||
         (faction.sight.has(tileUnder(point.x,point.y)) && !hostileBuildings.includes(target))) {
       faction.commander.enemySites.delete(target);
     }
@@ -118,7 +161,9 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     if (score>0 && (faction.commander.cooldowns.get(key)??0)>game.time) return;
     const risk=threatNear(point);
     const lessons=score>0?(faction.experience?.weights?.[task]??0):0;
-    options.push({task,score:score+lessons,target,key,point,goal,kind,distance:Math.round(distance(point)),
+    const oilLesson=task==='capture' && globalThis.matchEngine?.policies?.[faction.team]!=='baseline'?
+      faction.experience?.oilWeights?.[kind]??0:0;
+    options.push({task,score:score+lessons+oilLesson,target,key,point,goal,kind,distance:Math.round(distance(point)),
       risk:risk>Math.max(55,ownPower*.75)?'high':risk>0?'medium':'low'});
   };
   const factories=count('factory'),barracks=count('barracks'),yards=count('yard');
@@ -230,9 +275,13 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     const waypoint=campaignWaypoint(faction,home,army,frontier,threatNear);
     if (waypoint) add('advance',108,waypoint,'frontier',waypoint);
   }
+  const existing=faction.commander.plan;
+  const maneuver=usesTrainedPolicy(faction) && campaignReady && (!existing || existing.task==='intercept')?
+    campaignManeuver(faction,army,home,{power,rivals,homeThreat,ownPower,hostileBuildings,threatNear,options}):null;
+  if (maneuver) options.push(maneuver);
   if (!options.length) add('mobilize',0,null,'reserve',null,army.length+2);
   const {sample,wins,losses,draws,last,focus}=faction.experience??{};
-  return {options,contacts,fleet,power,defenses,army,members,aircraft,buildings,campaignReady,
+  return {options,contacts,fleet,power,defenses,army,members,aircraft,buildings,campaignReady,maneuver,
     snapshot:{
       personality:faction.strategy,
       situation:raid?.critical?'raided':faction.defensive?'outmatched':contacts.length?'contested':'clear',
@@ -294,10 +343,31 @@ function evaluateCommand(faction,plan,battle) {
     return 'complete';
   }
   if (faction.defensive && (task==='capture' || CAMPAIGN_TASKS.has(task))) return 'interrupted';
+  if (plan.maneuver && (battle.snapshot.own.home_threat>battle.snapshot.own.strength*.28 || battle.power<70)) {
+    plan.stopReason='home';
+    return 'interrupted';
+  }
+  if (plan.maneuver && task==='harass') {
+    const available=plan.detachment.filter(unit=>battle.army.includes(unit));
+    if (available.length<2 || plan.reserve.filter(unit=>battle.army.includes(unit)).length<2) {
+      plan.stopReason='strength';
+      return 'interrupted';
+    }
+    if (game.time-plan.started>4 && available.every(unit=>unit.blockedAttackTarget===target &&
+        unit.attackRetryTime>game.time)) {
+      plan.stopReason='path';
+      return 'stalled';
+    }
+  }
+  if (plan.maneuver && task==='recon' && !plan.scout && game.time>=plan.started+6) {
+    plan.stopReason='path';
+    return 'stalled';
+  }
+  if (task==='intercept' && battle.maneuver) return 'interrupted';
   const activeFront=battle.campaignReady && battle.options.some(option=>CAMPAIGN_TASKS.has(option.task));
   if (task==='advance' && activeFront && battle.options.some(option=>option.task!=='advance' &&
       CAMPAIGN_TASKS.has(option.task))) return 'interrupted';
-  if (activeFront && !CAMPAIGN_TASKS.has(task) && game.time>=plan.started+8 &&
+  if (activeFront && !CAMPAIGN_TASKS.has(task) && game.time>=plan.started+(plan.maneuver?18:8) &&
       !(task==='power' && battle.power<55)) return 'interrupted';
   if (task==='harass' && (battle.army.length<2 || battle.snapshot.own.home_threat>battle.snapshot.own.strength*.4)) {
     return 'interrupted';
@@ -320,13 +390,28 @@ function evaluateCommand(faction,plan,battle) {
   return null;
 }
 
+function finishCommand(faction,plan,result,reason) {
+  const commander=faction.commander;
+  commander.last={task:plan.task,result};
+  if (usesTrainedPolicy(faction)) {
+    const campaign=commander.campaign??={intercepts:[],nextTurn:0};
+    if (plan.task==='intercept' && result!=='interrupted') {
+      campaign.intercepts=campaign.intercepts.filter(time=>game.time-time<=75);
+      campaign.intercepts.push(game.time);
+    }
+    if (result==='complete' && ['capture','harass','strike'].includes(plan.task)) campaign.intercepts=[];
+  }
+  const metrics=plan.maneuver?{kind:'turn-result',phase:plan.task==='harass'?'probe':'recon',
+    reason:reason??plan.stopReason??(result==='lost'?'scouting':result)}:null;
+  log(factionName(faction.team)+'指挥计划：'+commandLabel(plan)+COMMAND_RESULTS[result]+'。',
+    faction.team,game.time,commander.last,metrics);
+}
+
 function reviewCommander(faction,army,buildings,members,intelligence,raid) {
   const commander=faction.commander;
   if (raid?.critical) {
     if (commander.plan) {
-      commander.last={task:commander.plan.task,result:'interrupted'};
-      log(factionName(faction.team)+'指挥计划：'+commandLabel(commander.plan)+COMMAND_RESULTS.interrupted+'。',
-        faction.team,game.time,commander.last);
+      finishCommand(faction,commander.plan,'interrupted','home');
     }
     commander.plan=null;
     commander.proposal=null;
@@ -344,15 +429,13 @@ function reviewCommander(faction,army,buildings,members,intelligence,raid) {
     const result=evaluateCommand(faction,commander.plan,battle);
     if (result) {
       const previous=commander.plan;
-      commander.last={task:previous.task,result};
+      finishCommand(faction,previous,result);
       battle.snapshot.recent=commander.last;
       const wait=previous.target?20:previous.task==='mobilize'?4:8;
       commander.cooldowns.set(previous.key,game.time+(result==='complete'?wait:20));
-      if (result==='lost' || result==='stalled' && previous.task==='capture') {
+      if (result==='lost' || result==='stalled' && (previous.task==='capture' || previous.maneuver)) {
         commander.scoutLead={point:previous.point,until:game.time+23};
       }
-      log(factionName(faction.team)+'指挥计划：'+commandLabel(previous)+COMMAND_RESULTS[result]+'。',
-        faction.team,game.time,commander.last);
       next=result==='complete'?available(previous.followup):null;
       if (next) source=previous.source;
       commander.plan=null;
@@ -368,13 +451,18 @@ function reviewCommander(faction,army,buildings,members,intelligence,raid) {
     const campaignNeeded=battle.campaignReady && battle.options.some(option=>CAMPAIGN_TASKS.has(option.task));
     const usefulForCampaign=choice && (CAMPAIGN_TASKS.has(choice.task) ||
       (choice.task==='power' && battle.power<55));
-    if (choice && !commander.cooldowns.has(choice.key) && (!mineFirst || choice.task==='mine') &&
+    if (choice && !battle.maneuver && !commander.plan?.maneuver && !commander.cooldowns.has(choice.key) &&
+        (!mineFirst || choice.task==='mine') &&
         (!lastDefense || ['intercept','fortify','mobilize'].includes(choice.task)) &&
         (!campaignNeeded || usefulForCampaign || lastDefense)) {
       next=choice;
       followup=proposal.followup;
       source='Codex';
     }
+  }
+  if (battle.maneuver && !commander.plan && !commander.cooldowns.has(battle.maneuver.key)) {
+    next=battle.maneuver;
+    source='local';
   }
   if (!commander.plan && !next) {
     const candidates=battle.options.filter(option=>!commander.cooldowns.has(option.key));
@@ -389,11 +477,15 @@ function reviewCommander(faction,army,buildings,members,intelligence,raid) {
       commander.plan={...next,source,followup,started:game.time,lastSeen:game.time,
         until:game.time+COMMAND_TASKS[next.task].duration};
       if (next.task==='advance') faction.searched.set(next.target,game.time);
-      log(factionName(faction.team)+(source==='Codex'?'采用 Codex 计划：':'指挥智能体：')+commandLabel(next)+'。',faction.team);
+      if (next.maneuver) commander.campaign.nextTurn=game.time+38;
+      const metrics=next.maneuver?{kind:'turn',task:next.task,reserve:next.reserve.length,
+        detachment:next.detachment?.length??1}:null;
+      log(factionName(faction.team)+(source==='Codex'?'采用 Codex 计划：':'指挥智能体：')+commandLabel(next)+'。',
+        faction.team,game.time,null,metrics);
     }
   }
   const current=commander.plan;
-  faction.orders={mode:faction.defensive?'guard':COMMAND_TASKS[current.task].mode,
+  faction.orders={mode:faction.defensive?'guard':current.maneuver && current.task==='recon'?'assault':COMMAND_TASKS[current.task].mode,
     task:current.task,target:current.target,source:current.source};
   requestCommanderPlan(faction,battle);
 }
