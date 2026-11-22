@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=command-buttons">
+  <link rel="stylesheet" href="style.css?v=command-dock">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=command-buttons" defer></script>
   <script src="building-themes.js?v=4" defer></script>
-  <script src="observer.js?v=command-buttons" defer></script>
+  <script src="observer.js?v=command-dock" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -87,7 +87,25 @@
         <button id="deploy-base" class="deploy-button" type="button" hidden><span aria-hidden="true">↓</span>部署</button>
         <div class="map-shade" aria-hidden="true"></div>
         <div class="radar-frame"><canvas id="radar" aria-label="小地图，点击移动视野"></canvas><div class="radar-glass" aria-hidden="true"></div></div>
-        <section id="unit-menu" class="map-menu unit-menu" aria-label="所选单位状态" hidden>
+        <div class="map-hud">
+          <div class="intel">
+            <span class="intel-pulse" aria-hidden="true"></span>
+            <span id="instruction">点击查看单位或建筑</span>
+          </div>
+          <div class="map-buttons" aria-label="地图视图">
+            <button id="view-blue" class="metal-button faction-view" type="button" title="切换到蓝方视角" aria-label="蓝方视角" aria-pressed="true">蓝方</button>
+            <button id="view-red" class="metal-button faction-view" type="button" title="切换到红方视角" aria-label="红方视角" aria-pressed="false">红方</button>
+            <button id="focus" class="metal-button focus-button" type="button" title="定位所选（F）" aria-label="定位所选"><span aria-hidden="true">⊙</span> <span id="focus-label">定位所选</span></button>
+          </div>
+        </div>
+      </div>
+      <section class="command-dock" aria-label="操作栏">
+        <div class="command-dock-bar">
+          <h3>操作</h3>
+          <div id="control-groups" class="control-groups" role="group" aria-label="0 到 9 号编队" hidden></div>
+        </div>
+        <p id="command-dock-empty" class="command-dock-empty">选择单位或建筑</p>
+        <section id="unit-menu" class="unit-menu" aria-label="所选单位状态" hidden>
           <div class="unit-status"><strong id="active-unit">未选择单位</strong><span><i class="dot green"></i> <span id="unit-mode"></span></span></div>
           <dl id="unit-stats" class="unit-stats" aria-label="单位属性" hidden>
             <div><dt>生命值</dt><dd id="unit-health"></dd></div>
@@ -103,13 +121,15 @@
             <progress id="cargo-bar" max="100" value="0">0</progress>
           </div>
         </section>
-        <section id="building-menu" class="map-menu building-menu" aria-labelledby="building-name" hidden>
-          <header><h3 id="building-name"></h3><button class="metal-button" id="close-building" type="button" aria-label="取消选择">×</button></header>
-          <p id="production-status" class="production-status"></p>
-          <progress id="production-bar" class="production-bar" max="100" value="0" aria-label="当前施工或生产进度" hidden></progress>
-          <div class="repair-panel" id="repair-panel">
-            <strong id="repair-status"></strong>
-            <progress id="repair-bar" class="production-bar" max="100" value="0" aria-label="建筑耐久"></progress>
+        <section id="building-menu" class="building-menu" aria-labelledby="building-name" hidden>
+          <div class="building-info">
+            <header><h3 id="building-name"></h3><button class="metal-button" id="close-building" type="button" aria-label="取消选择">×</button></header>
+            <p id="production-status" class="production-status"></p>
+            <progress id="production-bar" class="production-bar" max="100" value="0" aria-label="当前施工或生产进度" hidden></progress>
+            <div class="repair-panel" id="repair-panel">
+              <strong id="repair-status"></strong>
+              <progress id="repair-bar" class="production-bar" max="100" value="0" aria-label="建筑耐久"></progress>
+            </div>
           </div>
           <div id="building-controls" class="building-controls" hidden>
             <div id="production-control" class="building-control" hidden>
@@ -123,18 +143,7 @@
             </div>
           </div>
         </section>
-        <div class="map-hud">
-          <div class="intel">
-            <span class="intel-pulse" aria-hidden="true"></span>
-            <span id="instruction">点击查看单位或建筑</span>
-          </div>
-          <div class="map-buttons" aria-label="地图视图">
-            <button id="view-blue" class="metal-button faction-view" type="button" title="切换到蓝方视角" aria-label="蓝方视角" aria-pressed="true">蓝方</button>
-            <button id="view-red" class="metal-button faction-view" type="button" title="切换到红方视角" aria-label="红方视角" aria-pressed="false">红方</button>
-            <button id="focus" class="metal-button focus-button" type="button" title="定位所选（F）" aria-label="定位所选"><span aria-hidden="true">⊙</span> <span id="focus-label">定位所选</span></button>
-          </div>
-        </div>
-      </div>
+      </section>
       <div class="map-footer">
         <span><i class="dot friendly"></i> 蓝方单位</span>
         <span><i class="dot rich-ore"></i> 富矿</span>
@@ -193,6 +202,7 @@
       <dl>
         <div><dt>人机对战</dt><dd>点击「人机对战」指挥蓝方，红方由指挥智能体控制。对局在服务器运行，刷新页面会回到当前进度。胜负确定或点击「结束本局」后，可手动开始下一局。</dd></div>
         <div><dt>下达指令</dt><dd>左键选择单位，拖选多个单位，再左键指定目的地或敌方目标。右键取消选择。选中工程师后点击可见油田或敌方建筑可尝试占领。选中兵工厂或兵营后点击空地可设集结点。</dd></div>
+        <div><dt>编队</dt><dd>选中己方活动单位后按 0 到 9，为它们分配编号。右键取消选择后，按数字可召回编队。也可以点击底部操作栏已有的编号召回。</dd></div>
         <div><dt>视野</dt><dd>人机局中可用鼠标中键拖动、方向键和小地图移动视野，按 F 跟踪所选单位。已探开的区域持续可见，被摧毁的油田会留下遗址标记。观战时可切换红蓝方视角。</dd></div>
         <div><dt>建造和收入</dt><dd>鼠标移到基地车上，点击旁边的「部署」。选中已启用的己方建筑后，点一下建筑按钮，再点击地图上的空地。点击单位按钮可直接加入生产队列。包括已占领油田在内的己方建筑都提供 10 格建造半径。精炼厂会配发一辆自动采矿的矿车，油田满供电时每 15 秒提供 280 储备，首次占领奖励 260。</dd></div>
         <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>

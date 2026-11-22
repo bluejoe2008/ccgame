@@ -471,7 +471,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=command-buttons';
+  script.src = 'game.js?v=command-dock';
   document.head.append(script);
 }
 bootObserver();

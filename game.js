@@ -221,6 +221,8 @@ const touches = new Map();
 let mouseDrag = null;
 let selectionDrag = null;
 let mapPointer = null;
+const controlGroups=Array.from({length:10},()=>[]);
+const controlGroupStorage='ore-command-control-groups';
 let lastFrame = 0;
 let nextRadar = 0;
 let nextHud = 0;
@@ -895,7 +897,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=command-buttons');
+      const worker=new Worker('terrain-worker.js?v=command-dock');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -6036,22 +6038,6 @@ function advanceRepairs(dt) {
   }
 }
 
-function positionBuildingMenu(building) {
-  const {w,h}=viewport;
-  const {x,y,width,height}=building;
-  const center=project(camera.x,camera.y);
-  const point=project(x+(width-1)/2,y+(height-1)/2,building.remaining>0?12:24);
-  const sx=w/2+(point.x-center.x)*viewport.scale;
-  const sy=h/2+(point.y-center.y)*viewport.scale;
-  const popupWidth=buildingMenu.offsetWidth, popupHeight=buildingMenu.offsetHeight;
-  const gap=U*(width+height)*.45*viewport.scale+8;
-  const left=Math.max(8,Math.min(w-popupWidth-8,sx+gap+popupWidth<w-8?sx+gap:sx-gap-popupWidth));
-  const radarFloor=left+popupWidth>w-radar.offsetWidth-24?radar.offsetHeight+20:8;
-  const top=Math.max(8,Math.min(h-popupHeight-44,Math.max(radarFloor,sy-popupHeight*.42)));
-  buildingMenu.style.left=Math.round(left)+'px';
-  buildingMenu.style.top=Math.round(top)+'px';
-}
-
 function drawRange(center,radius,weapon=null) {
   const {x,y}=project(center.x,center.y);
   ctx.save();
@@ -6084,11 +6070,27 @@ function purchaseButton(type,spec,label=spec.label) {
   button.type='button';
   button.className='command';
   button.dataset.type=type;
+  const icon=document.createElement(type==='helicopter'?'canvas':'img');
+  icon.className='command-thumbnail';
+  icon.setAttribute('aria-hidden','true');
+  if (type==='helicopter') {
+    icon.width=138;
+    icon.height=88;
+    drawTransportHelicopter(icon.getContext('2d'),{heading:.46},{x:69,y:72},TEAM_PAINT.player);
+  } else {
+    icon.alt='';
+    icon.loading='lazy';
+    if (spec.building) {
+      const art=isAirborne({type})?'fighter':type;
+      const facing=type==='reconPlane'?2:1;
+      icon.src=sprites.get(art+'-'+facing+'-blue').src;
+    }
+  }
   const name=document.createElement('span');
   name.textContent=label;
   const price=document.createElement('strong');
   price.textContent=spec.cost;
-  button.append(name,price);
+  button.append(icon,name,price);
   return button;
 }
 
@@ -6120,15 +6122,23 @@ function syncProductionQueue(building) {
 
 function syncPlayerBuildingControls(building) {
   const controls=byId('building-controls');
-  controls.hidden=!playerCanCommand() || building.team!=='player' || building.health<=0 || Boolean(game.placement);
+  controls.hidden=!playerCanCommand() || building.team!=='player' || building.health<=0;
   if (controls.hidden) return;
   const construction=byId('construction-control');
   construction.hidden=!readyConstructionSite(building,'player');
   if (!construction.hidden) {
-    for (const button of byId('construction-options').children) {
-      button.disabled=FACTIONS.player.credits<BUILDINGS[button.dataset.type].cost;
+    const options=byId('construction-options');
+    const theme=resolveBuildingTheme(observedMatch.buildingStyles?.player);
+    for (const button of options.children) {
+      const {type,axis='x'}=button.dataset;
+      button.disabled=FACTIONS.player.credits<BUILDINGS[type].cost;
       button.title=button.disabled?'储备不足':'点击后在地图上选址';
+      button.setAttribute('aria-pressed',String(game.placement?.type===type && game.placement.axis===axis));
+      if (options.dataset.theme!==theme) {
+        button.firstElementChild.src='assets/'+buildingThemeAsset(theme,type,'blue',axis)+'.webp';
+      }
     }
+    options.dataset.theme=theme;
   }
   const products=byId('production-options');
   if (products.dataset.source!==building.type) {
@@ -6146,14 +6156,7 @@ function syncBuildMenu() {
   buildingMenu.hidden=!building;
   if (!building) return;
   const placing=Boolean(game.placement);
-  buildingMenu.classList.toggle('is-placing',placing);
   byId('close-building').setAttribute('aria-label',placing?'取消放置':'取消选择');
-  if (placing) {
-    byId('building-controls').hidden=true;
-    byId('building-name').textContent='放置'+BUILDINGS[game.placement.type].label;
-    positionBuildingMenu(building);
-    return;
-  }
   const spec=buildingSpec(building.type);
   const job=building.team===game.perspective?building.queue[0]:null;
   const weapon=spec.weapon;
@@ -6193,7 +6196,7 @@ function syncBuildMenu() {
   } else if (building.type==='yard') {
     status='已部署';
   }
-  byId('building-name').textContent=buildingCaption(building);
+  byId('building-name').textContent=placing?'放置'+BUILDINGS[game.placement.type].label:buildingCaption(building);
   if (spec.powerUse && building.team===game.perspective && !building.remaining) {
     status+=' · 耗电 '+spec.powerUse;
   }
@@ -6216,7 +6219,6 @@ function syncBuildMenu() {
   }
   byId('repair-status').textContent='耐久 '+Math.ceil(building.health)+' / '+spec.health+repairStatus;
   syncPlayerBuildingControls(building);
-  positionBuildingMenu(building);
 }
 
 function deployCandidate() {
@@ -6249,7 +6251,82 @@ function syncPlayerPointer() {
   }
 }
 
+function ownGroupUnit(unit) {
+  return unit?.team==='player' && unit.health>0 && displayedUnits.get(unit.viewId)===unit;
+}
+
+function controlGroupMembers(number) {
+  return controlGroups[number].map(id=>displayedUnits.get(id)).filter(ownGroupUnit);
+}
+
+function saveControlGroup(number,selection) {
+  if (!selection.length) return;
+  controlGroups[number]=selection.map(unit=>unit.viewId);
+  try {
+    sessionStorage.setItem(controlGroupStorage,JSON.stringify({match:observedMatch.id,groups:controlGroups}));
+  } catch {}
+  notice('已将 '+selection.length+' 个单位编为 '+number+' 号队。');
+  syncControlGroups();
+}
+
+function recallControlGroup(number) {
+  const members=controlGroupMembers(number);
+  if (members.length) select(members);
+  else if (controlGroups[number].length) notice(number+' 号编队当前无可选单位。');
+}
+
+function syncControlGroups() {
+  const bar=byId('control-groups');
+  const selected=game.selection.filter(ownGroupUnit);
+  bar.hidden=!playerCanCommand() || (!selected.length && !controlGroups.some(ids=>ids.length));
+  if (bar.hidden) return;
+  for (const [number,button] of Array.from(bar.children).entries()) {
+    const saved=controlGroups[number].length>0;
+    const members=saved?controlGroupMembers(number):[];
+    const disabled=saved?!members.length:!selected.length;
+    const pressed=String(Boolean(members.length) && members.length===selected.length &&
+      members.every(unit=>selected.includes(unit)));
+    const label=saved?number+' 号编队，'+members.length+' 个可选单位':'分配到 '+number+' 号编队';
+    if (button.title===label && button.disabled===disabled && button.getAttribute('aria-pressed')===pressed) continue;
+    button.disabled=disabled;
+    button.dataset.filled=String(saved);
+    button.setAttribute('aria-pressed',pressed);
+    button.setAttribute('aria-label',label);
+    button.title=label;
+    button.lastElementChild.textContent=saved?members.length:'';
+  }
+}
+
+function attachControlGroups() {
+  try {
+    const saved=JSON.parse(sessionStorage.getItem(controlGroupStorage));
+    if (saved?.match===globalThis.matchBootstrap.id && Array.isArray(saved.groups)) {
+      for (let number=0;number<controlGroups.length;number++) {
+        if (Array.isArray(saved.groups[number])) {
+          controlGroups[number]=saved.groups[number].filter(id=>typeof id==='string' && /^u\d+$/.test(id));
+        }
+      }
+    }
+  } catch {}
+  const bar=byId('control-groups');
+  for (let number=0;number<controlGroups.length;number++) {
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='metal-button';
+    const count=document.createElement('small');
+    count.setAttribute('aria-hidden','true');
+    button.append(String(number),count);
+    button.addEventListener('click',()=>{
+      if (!playerCanCommand()) return;
+      if (controlGroups[number].length) recallControlGroup(number);
+      else saveControlGroup(number,game.selection.filter(ownGroupUnit));
+    });
+    bar.append(button);
+  }
+}
+
 function attachPlayerControls() {
+  attachControlGroups();
   const construction=byId('construction-options');
   const opening=['refinery','solar','barracks','factory'];
   for (const type of [...opening,...Object.keys(BUILDINGS).filter(type=>!opening.includes(type))]) {
@@ -6347,6 +6424,7 @@ function syncHud() {
   byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label+rank+group : count ? '已选 '+count+' 个单位' :
     building ? buildingSpec(building.type).label : '未选择单位';
   unitMenu.hidden=!count;
+  byId('command-dock-empty').hidden=Boolean(building || count);
   syncUnitStats(unit);
   byId('cargo-count').textContent=cargo+' / '+CARGO_LIMIT;
   byId('cargo-bar').value=cargo;
@@ -6396,6 +6474,7 @@ function syncHud() {
   syncCommanderHud();
   syncBuildMenu();
   syncPlayerPointer();
+  syncControlGroups();
 }
 
 function syncUnitStats(unit) {
@@ -6760,8 +6839,17 @@ document.addEventListener('fullscreenchange',()=>{
   byId('fullscreen').querySelector('.header-label').textContent=document.fullscreenElement?'退出全屏':'全屏';
 });
 document.addEventListener('keydown',event=>{
-  if (byId('help').open || byId('training-drills').open || event.altKey || event.ctrlKey || event.metaKey ||
-      event.target.closest?.('select')) return;
+  if (document.querySelector('dialog[open]') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing ||
+      event.target.closest?.('select,input,textarea,[contenteditable]')) return;
+  if (/^[0-9]$/.test(event.key) && playerCanCommand()) {
+    event.preventDefault();
+    if (event.repeat) return;
+    const number=Number(event.key);
+    const selection=game.selection.filter(ownGroupUnit);
+    if (selection.length) saveControlGroup(number,selection);
+    else recallControlGroup(number);
+    return;
+  }
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
     event.preventDefault();
     pressed.add(event.key);
