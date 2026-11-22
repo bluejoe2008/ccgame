@@ -5,10 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=battle-history">
+  <link rel="stylesheet" href="style.css?v=building-themes">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=battle-history" defer></script>
-  <script src="observer.js?v=mountain-campaign" defer></script>
+  <script src="building-themes.js?v=1" defer></script>
+  <script src="observer.js?v=building-themes" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -48,6 +49,21 @@
           <span id="match-clock" class="match-clock" aria-label="对局进度">连接中</span>
         </div>
         <div class="map-top-actions">
+          <details class="log-block style-block">
+            <summary aria-label="建筑风格"><span class="style-label-prefix">建筑</span>风格</summary>
+            <div class="style-panel">
+              <div class="style-fields">
+                <label class="style-blue" for="style-player">蓝方</label>
+                <select id="style-player" aria-describedby="style-current-player" disabled></select>
+                <span id="style-current-player"></span>
+                <label class="style-red" for="style-enemy">红方</label>
+                <select id="style-enemy" aria-describedby="style-current-enemy" disabled></select>
+                <span id="style-current-enemy"></span>
+              </div>
+              <p>固定风格立即生效。随机风格在每局开场时抽取。</p>
+              <p id="style-status" role="status"></p>
+            </div>
+          </details>
           <details class="log-block tech-block">
             <summary>科技与指挥</summary>
             <div class="tech-panel" id="tech-panel">

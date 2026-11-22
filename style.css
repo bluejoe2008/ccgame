@@ -356,6 +356,30 @@ h1,h2 { margin: 0; }
 }
 .log-block { color: #d4dbc5; font-size: 11px; }
 .log-block summary { cursor: pointer; }
+.style-panel {
+  position: absolute;
+  right: 10px;
+  top: 100%;
+  width: min(320px, calc(100% - 20px));
+  padding: 12px;
+  background: #202a1ff5;
+  border: 1px solid #59654b;
+  box-shadow: 0 5px 20px #080d08b0;
+}
+.style-fields {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 8px;
+}
+.style-fields label { font-weight: 700; }
+.style-blue { color: #9bcbef; }
+.style-red { color: #f29a84; }
+.style-fields select { min-width: 0; padding: 5px; color: var(--text); background: #19241a; border: 1px solid #687554; }
+.style-fields span, .style-panel p { color: var(--muted); }
+.style-panel p { margin: 9px 0 0; }
+#style-status { color: #eac886; }
+#style-status:empty { display: none; }
 .log-block ol {
   position: absolute;
   top: 100%;
@@ -465,7 +489,11 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
   .unit-menu { bottom: 45px; left: 7px; }
   .map-menu { width: min(212px, calc(100% - 16px)); }
   .map-top-actions { gap: 8px; }
+  .style-label-prefix { display: none; }
   .commands { gap: 3px; }
   .command { padding-inline: 4px; gap: 5px; }
   .command kbd { display: none; }
+}
+@media (max-width: 400px) {
+  .map-coords { display: none; }
 }

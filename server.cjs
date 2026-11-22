@@ -10,6 +10,7 @@ const { promisify, parseArgs } = require('node:util');
 const { Worker } = require('node:worker_threads');
 const { pipeline } = require('node:stream/promises');
 const { findCodex, chooseWithCodex, validObservation } = require('./game-planner.cjs');
+const { validBuildingThemePreference } = require('./building-themes.js');
 
 const compress = promisify(gzip);
 const root = __dirname;
@@ -27,7 +28,8 @@ const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(),'.local',
 const checkpointFile = path.resolve(options.state || path.join(stateHome,'ore-command','match.bin'));
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
   '.css':'text/css; charset=utf-8','.webp':'image/webp','.md':'text/plain; charset=utf-8'};
-const publicFiles = new Set(['/index.html','/style.css','/audio.js','/commander.js','/game.js','/observer.js','/terrain-worker.js']);
+const publicFiles = new Set(['/index.html','/style.css','/audio.js','/commander.js','/building-themes.js',
+  '/game.js','/observer.js','/terrain-worker.js']);
 const pending = new Map();
 let nextRequest = 0;
 let worker;
@@ -98,7 +100,7 @@ function sameOrigin(request) {
   catch { return false; }
 }
 
-async function readObservation(request) {
+async function readJson(request) {
   if ((request.headers['content-type'] ?? '').split(';')[0]!=='application/json') return null;
   const chunks=[];
   let size=0;
@@ -167,8 +169,16 @@ async function serve(request,response) {
       const action=url.pathname.split('/').pop();
       return send(200,await matchCall(action,{current:request.headers['x-match-id']}));
     }
+    if (url.pathname==='/api/match/building-style') {
+      const selection=await readJson(request);
+      if (!['player','enemy'].includes(selection?.team) ||
+          !validBuildingThemePreference(selection.preference)) return send(400,{error:'invalid_building_style'});
+      const state=await matchCall('building-style',{team:selection.team,preference:selection.preference,
+        current:request.headers['x-match-id']});
+      return state?send(200,state):send(409,{error:'match_changed'});
+    }
     if (url.pathname==='/api/strategy') {
-      const snapshot=await readObservation(request);
+      const snapshot=await readJson(request);
       if (!validObservation(snapshot)) return send(400,{error:'invalid_snapshot'});
       if (!codex) return send(503,{error:'local_strategy'});
       if (plannerBusy || Date.now()<nextStrategy) return send(429,{error:'busy'});

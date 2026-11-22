@@ -133,7 +133,7 @@ const BUILDINGS = {
     weapon:{range:4.2,damage:18,reload:.48,height:26,armorFactor:.55},priority:'soft'},
   laser:{label:'激光塔',cost:650,time:7.2,width:2,height:2,roof:100,body:65,health:320,defense:.16,powerUse:65,color:'#9bd9d1',
     weapon:{range:6.7,damage:30,reload:1.22,height:82,effect:'laser',armorFactor:1.22,softFactor:.68},priority:'armor'},
-  solar:{label:'风力电站',cost:300,time:4.3,width:2,height:2,roof:48,body:32,health:230,powerOutput:90,color:'#89acc0'},
+  solar:{label:'小型电站',cost:300,time:4.3,width:2,height:2,roof:48,body:32,health:230,powerOutput:90,color:'#89acc0'},
   diesel:{label:'燃油发电厂',cost:600,time:6,width:3,height:2,roof:83,body:53,health:370,powerOutput:180,color:'#a9b6b1'},
   recreation:{label:'棋牌室',cost:240,time:4,width:2,height:2,roof:53,body:35,health:240,
     powerUse:12,fireRateBonus:.08,color:'#aba489'},
@@ -731,10 +731,6 @@ const TANK_TURRET_POSES=[
   {rect:[712,841,145,265],mount:[784,1077],width:45},
   {rect:[959,900,268,193],mount:[1051,1064],width:78},
 ];
-const buildingSpriteWidths={yard:205,refinery:232,factory:205,repairDepot:188,barracks:163,airport:270,
-  oil:148,sentry:77,turret:155,bunker:135,wall:59,laser:96,solar:113,diesel:199,recreation:136,training:201};
-// The server uses the same optical emitter position when creating a laser effect.
-const LASER_ART={aspect:360/185,emitter:[.45,.245]};
 let poorOreArt=null;
 let groundTexture=null;
 if (!ENGINE_ONLY) {
@@ -749,12 +745,6 @@ for (const type of Object.keys(unitSpriteWidths)) {
     }
   }
 }
-for (const type of Object.keys(buildingSpriteWidths)) {
-  for (const variant of type==='wall'?['wall-x','wall-y']:[type]) {
-    for (const tint of ['blue','red']) asset(variant+'-'+tint,'mountain-'+variant+'-'+tint);
-  }
-}
-asset('oil-neutral','mountain-oil-neutral');
 for (const name of ['fir','pine','reeds','granite','bluff','river-stones']) asset(name,'mountain-'+name);
 const oreImage=asset('ore');
 oreImage.addEventListener('load',()=>{
@@ -916,7 +906,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=mountain-campaign');
+      const worker=new Worker('terrain-worker.js?v=building-themes');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2185,39 +2175,24 @@ function constructionFrame(image) {
 }
 
 function structureArt(building) {
-  const {type}=building;
-  const tint=building.team==='neutral'?'neutral':factionTint(building.team);
-  const variant=type==='wall'?'wall-'+(building.axis??'x'):type;
-  const image=sprites.get(variant+'-'+tint);
+  const {type,team}=building;
+  const activeStyles=ENGINE_ONLY?globalThis.matchEngine.buildingStyles:
+    (observedMatch??globalThis.matchBootstrap)?.buildingStyles;
+  const style=resolveBuildingTheme(team==='neutral'?null:activeStyles?.[team]);
+  const theme=BUILDING_THEMES[style];
+  const tint=team==='neutral'?'neutral':factionTint(team);
+  const filename=ENGINE_ONLY?null:buildingThemeAsset(style,type,tint,building.axis);
+  const image=filename?(sprites.get(filename)??asset(filename)):null;
   const position=yardCenter(building);
   const center=project(position.x,position.y);
-  const width=buildingSpriteWidths[type];
-  const height=type==='laser'?width*LASER_ART.aspect:
+  const width=theme.widths[type]??BUILDING_WIDTHS[type];
+  const height=type==='laser'?width*theme.laser.aspect:
     image?.naturalWidth?width*image.naturalHeight/image.naturalWidth:buildingSpec(type).roof;
   const bottom=center.y+V*(building.width+building.height)*(type==='wall'?.37:.48);
   const progress=building.remaining>0?1-building.remaining/buildingSpec(type).time:1;
-  return {image,left:center.x-width/2,width,height,bottom,top:bottom-height,progress};
+  return {image,left:center.x-width/2,width,height,bottom,top:bottom-height,progress,theme};
 }
 
-// Operating effects sit on features shared by the two painted faction variants.
-const buildingLights={
-  yard:[[.46,.70],[.55,.75]],
-  factory:[[.47,.52],[.60,.54]],
-  repairDepot:[[.44,.44],[.64,.54]],
-  refinery:[[.65,.61],[.88,.60]],
-  barracks:[[.45,.32],[.65,.36]],
-  airport:[[.06,.80],[.17,.64],[.35,.40],[.48,.92],[.70,.62],[.83,.38]],
-  solar:[[.39,.82]],
-  diesel:[[.54,.76],[.67,.72],[.74,.74]],
-  oil:[[.63,.48]],
-  sentry:[[.43,.38]],
-  turret:[[.39,.43]],
-  bunker:[[.58,.49]],
-  laser:[LASER_ART.emitter],
-  recreation:[[.132,.48],[.66,.51]],
-  training:[[.51,.85]],
-};
-const buildingStacks={diesel:[[.096,.092],[.19,.102]],refinery:[[.075,.022],[.167,.091]]};
 const buildingEffectSprites=new Map();
 
 function drawBuildingGlow(context,color,x,y,rx,ry,intensity) {
@@ -2241,7 +2216,8 @@ function drawBuildingGlow(context,color,x,y,rx,ry,intensity) {
 
 function drawBuildingActivity(context,building,art) {
   const {type,team}=building;
-  const lights=buildingLights[type];
+  const {theme}=art;
+  const lights=type==='laser'?[theme.laser.emitter]:theme.lights[type];
   if (!lights || team==='neutral' || building.health<=0 || building.remaining>0 ||
       reducedMotion.matches || observedMatch?.status!=='running') return;
   const rate=team===game.perspective?viewFaction().power.rate:1;
@@ -2257,10 +2233,11 @@ function drawBuildingActivity(context,building,art) {
     drawBuildingGlow(context,color,art.left+x*art.width,art.top+y*art.height,radius,radius*.8,strength);
   }
 
-  if (type==='oil' || type==='diesel') {
+  const rotor=theme.rotors[type];
+  if (rotor) {
     const oil=type==='oil';
-    const x=art.left+art.width*(oil?.22:.72);
-    const y=art.top+art.height*(oil?.62:.74);
+    const x=art.left+art.width*rotor[0];
+    const y=art.top+art.height*rotor[1];
     const radius=oil?5:4;
     context.beginPath();
     for (let i=0;i<3;i++) {
@@ -2273,7 +2250,7 @@ function drawBuildingActivity(context,building,art) {
     context.stroke();
   }
 
-  const stacks=buildingStacks[type];
+  const stacks=theme.stacks[type];
   if (stacks && building.health>buildingSpec(type).health*.70) {
     const diesel=type==='diesel';
     for (const [index,[sx,sy]] of stacks.entries()) {
@@ -2293,6 +2270,12 @@ function drawStructure(context,structure,art) {
   if (image?.naturalWidth) {
     if (progress>=1) {
       context.drawImage(image,left,top,drawWidth,drawHeight);
+      if (structure.type==='repairDepot' && art.theme.repairMark) {
+        const [x,y]=art.theme.repairMark;
+        context.fillStyle='#d1d8a1';
+        context.fillRect(left+x*drawWidth-5,top+y*drawHeight-1.5,10,3);
+        context.fillRect(left+x*drawWidth-1.5,top+y*drawHeight-5,3,10);
+      }
       drawBuildingActivity(context,structure,art);
       return;
     }
@@ -5575,7 +5558,7 @@ function fireWeapon(attacker,from,weapon,target,hits) {
     projectGround(originX,originY,weapon.height);
   if (effect==='laser') {
     const art=structureArt(attacker);
-    const [x,y]=LASER_ART.emitter;
+    const [x,y]=art.theme.laser.emitter;
     origin={x:art.left+x*art.width,y:art.top+y*art.height};
   }
   const height=target.width ? Math.min(32,buildingSpec(target.type).body*.62) :
@@ -6459,7 +6442,8 @@ document.addEventListener('fullscreenchange',()=>{
   byId('fullscreen').querySelector('.header-label').textContent=document.fullscreenElement?'退出全屏':'全屏';
 });
 document.addEventListener('keydown',event=>{
-  if (byId('help').open || event.altKey || event.ctrlKey || event.metaKey) return;
+  if (byId('help').open || event.altKey || event.ctrlKey || event.metaKey ||
+      event.target.closest?.('select')) return;
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
     event.preventDefault();
     pressed.add(event.key);

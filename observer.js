@@ -4,6 +4,7 @@ let observedMatch;
 let lastLog = 0;
 let lastSound = null;
 let pendingControl = false;
+let pendingBuildingStyle = false;
 let observerConnected = true;
 let observationRequest = 0;
 let observationTimer;
@@ -59,6 +60,52 @@ function updateMatchControls() {
   byId('match-clock').textContent=number+(observerConnected?status:'重连中 · '+clock);
   byId('start-session').disabled = running || !observerConnected || pendingControl;
   byId('end-session').disabled = (!running && !rollover) || !observerConnected || pendingControl;
+  updateBuildingStyleControls();
+}
+
+function updateBuildingStyleControls() {
+  for (const team of ['player','enemy']) {
+    const select=byId('style-'+team);
+    const preference=observedMatch?.buildingStylePreferences?.[team];
+    select.disabled=!preference || !observerConnected || pendingBuildingStyle;
+    if (preference && !pendingBuildingStyle && select.value!==preference) select.value=preference;
+    const current=byId('style-current-'+team);
+    const theme=observedMatch?.buildingStyles?.[team];
+    const label=hasBuildingTheme(theme)?'本局 '+BUILDING_THEMES[theme].label:'';
+    if (current.textContent!==label) current.textContent=label;
+  }
+}
+
+async function chooseBuildingStyle(team,preference) {
+  if (pendingBuildingStyle) return;
+  pendingBuildingStyle=true;
+  const status=byId('style-status');
+  status.textContent='';
+  updateBuildingStyleControls();
+  try {
+    const response=await fetch('/api/match/building-style',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','X-Match-Id':observedMatch.id},
+      body:JSON.stringify({team,preference}),
+      signal:AbortSignal.timeout(9000),
+    });
+    if (response.status===409) {
+      await pollObservation();
+      return;
+    }
+    if (!response.ok) throw new Error('Building style update failed');
+    const state=await response.json();
+    if (state.id===observedMatch.id) {
+      observedMatch.buildingStyles=state.buildingStyles;
+      observedMatch.buildingStylePreferences=state.buildingStylePreferences;
+    }
+    await pollObservation();
+  } catch {
+    status.textContent='风格设置未保存，请重试。';
+  } finally {
+    pendingBuildingStyle=false;
+    updateBuildingStyleControls();
+  }
 }
 
 function updateHistoryReview() {
@@ -308,6 +355,12 @@ function attachObserver(snapshot) {
   const yard = snapshot.buildings.find(building => building.team === snapshot.team && building.type === 'yard');
   const mobile = snapshot.units.find(unit => unit.team === snapshot.team);
   centerCamera(yard ? yardCenter(yard) : mobile ?? (snapshot.team === 'player' ? blueOrigin : redOrigin));
+  for (const team of ['player','enemy']) {
+    const select=byId('style-'+team);
+    select.add(new Option('每局随机',RANDOM_BUILDING_THEME));
+    for (const [value,theme] of Object.entries(BUILDING_THEMES)) select.add(new Option(theme.label,value));
+    select.addEventListener('change',()=>chooseBuildingStyle(team,select.value));
+  }
   applyObservation(snapshot);
   byId('start-session').addEventListener('click',()=>controlMatch('start'));
   byId('end-session').addEventListener('click',()=>controlMatch('end'));
@@ -335,7 +388,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=mountain-campaign';
+  script.src = 'game.js?v=building-themes';
   document.head.append(script);
 }
 bootObserver();

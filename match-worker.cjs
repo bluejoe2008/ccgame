@@ -7,6 +7,7 @@ const vm = require('node:vm');
 const v8 = require('node:v8');
 const { parentPort, workerData } = require('node:worker_threads');
 const { BattleHistory, labels, replaceFile } = require('./battle-history.cjs');
+const { BUILDING_THEMES, RANDOM_BUILDING_THEME, validBuildingThemePreference, resolveBuildingTheme } = require('./building-themes.js');
 
 const { checkpointFile, plannerOrigin } = workerData;
 const version = 1;
@@ -14,7 +15,7 @@ const step = .04;
 const roundDelay = 10000;
 fs.mkdirSync(path.dirname(checkpointFile), { recursive:true, mode:0o700 });
 const history = new BattleHistory(checkpointFile);
-const sources = ['commander.js', 'game.js'].map(name =>
+const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
   new vm.Script(fs.readFileSync(path.join(__dirname, name), 'utf8'), { filename: name }));
 
 const interfaceScript = new vm.Script(`({
@@ -65,6 +66,15 @@ let roundArchived = false;
 let archiveRetryAt = 0;
 let startPending = false;
 const heardAt = new Map();
+const factions = ['player','enemy'];
+const availableThemes = Object.keys(BUILDING_THEMES);
+
+function stylePreferences(saved) {
+  return Object.fromEntries(factions.map(team=>{
+    const preference=saved?.[team];
+    return [team,validBuildingThemePreference(preference)?preference:RANDOM_BUILDING_THEME];
+  }));
+}
 
 function addLog(message, team, time, plan) {
   const entry = { id:nextEvent++, message, team, time };
@@ -94,6 +104,7 @@ function initialise(description, saved = null) {
     fetch: (url, options) => fetch(new URL(url, plannerOrigin), options),
     matchEngine: {
       seed: match.seed,
+      get buildingStyles() { return match.buildingStyles; },
       planner: Boolean(plannerOrigin),
       log:addLog,
       sound(cue, point, source) {
@@ -119,10 +130,15 @@ function initialise(description, saved = null) {
   if (saved) engine.restore(saved);
 }
 
-function freshMatch(status, round, previousSeed = null) {
+function freshMatch(status, round, previousSeed = null, previousPreferences) {
   const chosen=randomInt(previousSeed===null?0x100000000:0xffffffff);
   const seed=previousSeed!==null && chosen>=previousSeed?chosen+1:chosen;
-  return { id:randomUUID(), seed, status, round, auto:true,
+  const buildingStylePreferences=stylePreferences(previousPreferences);
+  const buildingStyles=Object.fromEntries(factions.map(team=>{
+    const preference=buildingStylePreferences[team];
+    return [team,preference===RANDOM_BUILDING_THEME?availableThemes[randomInt(availableThemes.length)]:preference];
+  }));
+  return { id:randomUUID(), seed, status, round, auto:true, buildingStyles, buildingStylePreferences,
     startedAt:status==='running'?Date.now():null, finishedAt:null, nextRoundAt:null };
 }
 
@@ -175,7 +191,7 @@ function startRound() {
   if (['finished','ended'].includes(match.status) && !archiveRound()) return;
   const experience=history.experience();
   const round=match.round+Number(match.status!=='idle');
-  initialise(freshMatch('running',round,match.seed));
+  initialise(freshMatch('running',round,match.seed,match.buildingStylePreferences));
   addLog('第 '+round+' 局开始。双方开始部署与侦察。',null,0);
   for (const [team,review] of Object.entries(experience)) {
     engine.FACTIONS[team].experience=review;
@@ -303,6 +319,20 @@ function command(request) {
   switch (request.action) {
     case 'status': return matchInfo();
     case 'snapshot': return observation(request.team);
+    case 'building-style': {
+      if (request.current!==match.id) return null;
+      const {team,preference}=request;
+      if (!factions.includes(team) || !validBuildingThemePreference(preference)) throw new Error('Invalid building style');
+      if (match.buildingStylePreferences[team]===preference) return matchInfo();
+      const previous=match;
+      match={...match, buildingStylePreferences:{...match.buildingStylePreferences,[team]:preference}};
+      if (preference!==RANDOM_BUILDING_THEME) match.buildingStyles={...match.buildingStyles,[team]:preference};
+      if (!saveSafely()) {
+        match=previous;
+        throw new Error('Building style checkpoint failed');
+      }
+      return matchInfo();
+    }
     case 'history': return history.list(request.team,request.before);
     case 'historyLog': {
       const round=history.get(request.round);
@@ -338,6 +368,8 @@ try {
   match.startedAt??=null;
   match.finishedAt??=null;
   match.nextRoundAt??=match.auto && match.status==='finished'?Date.now()+roundDelay:null;
+  match.buildingStyles=Object.fromEntries(factions.map(team=>[team,resolveBuildingTheme(match.buildingStyles?.[team])]));
+  match.buildingStylePreferences=stylePreferences(match.buildingStylePreferences);
   initialise(match, saved);
 } catch (error) {
   if (error.code !== 'ENOENT') console.error('Cannot restore match:', error.message);
