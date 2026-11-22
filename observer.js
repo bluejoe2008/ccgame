@@ -433,7 +433,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=unit-movement';
+  script.src = 'game.js?v=construction-sites';
   document.head.append(script);
 }
 bootObserver();

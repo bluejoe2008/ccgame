@@ -904,7 +904,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=unit-movement');
+      const worker=new Worker('terrain-worker.js?v=construction-sites');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2578,8 +2578,9 @@ function drawWorld() {
   const selectedBuilding=game.selectedBuilding;
   if (selectedBuilding && !selectedBuilding.remaining) {
     const weapon=BUILDINGS[selectedBuilding.type]?.weapon;
-    if (selectedBuilding.type==='yard') drawRange(yardCenter(selectedBuilding),BUILD_RADIUS);
-    else if (weapon) drawRange(yardCenter(selectedBuilding),weapon.range,weapon);
+    const center=yardCenter(selectedBuilding);
+    if (readyConstructionSite(selectedBuilding,game.perspective)) drawRange(center,BUILD_RADIUS);
+    if (weapon) drawRange(center,weapon.range,weapon);
   }
   const selectedUnit=game.selected;
   const weapon=WEAPONS[selectedUnit?.type];
@@ -3916,22 +3917,26 @@ function rectanglesOverlap(a,b) {
 }
 
 function readyYard(building,team) {
-  return building.type==='yard' && building.team===team && building.remaining===0 && building.health>0;
+  return building.type==='yard' && readyConstructionSite(building,team);
+}
+
+function readyConstructionSite(building,team) {
+  return building.team===team && building.remaining===0 && building.health>0;
 }
 
 function yardCenter(yard) {
   return {x:yard.x+(yard.width-1)/2,y:yard.y+(yard.height-1)/2};
 }
 
-function withinYard(box,yard) {
-  const {x,y}=yardCenter(yard);
+function withinConstructionRadius(box,site,radius=BUILD_RADIUS) {
+  const {x,y}=yardCenter(site);
   const dx=Math.max(Math.abs(box.left-x),Math.abs(box.right-x));
   const dy=Math.max(Math.abs(box.top-y),Math.abs(box.bottom-y));
-  return dx*dx+dy*dy<=BUILD_RADIUS**2;
+  return dx*dx+dy*dy<=radius**2;
 }
 
 function withinBuildRange(box,team) {
-  return structures.some(yard=>readyYard(yard,team) && withinYard(box,yard));
+  return structures.some(site=>readyConstructionSite(site,team) && withinConstructionRadius(box,site));
 }
 
 function wallPreservesAccess(wall) {
@@ -4249,7 +4254,7 @@ function productionRate(building) {
   return faction.power.rate*(building.type==='factory'?1+faction.factoryBonus:1);
 }
 
-function maintainPower(faction,yard,reserve=0) {
+function maintainPower(faction,site,reserve=0) {
   const sites=structures.filter(building=>building.team===faction.team && building.health>0);
   const plants=sites.filter(building=>buildingSpec(building.type).powerOutput);
   if (plants.some(plant=>plant.remaining)) return;
@@ -4259,14 +4264,14 @@ function maintainPower(faction,yard,reserve=0) {
   const available=faction.credits-(plants.length?reserve:0);
   const type=plants.length && deficit>55 && available>=BUILDINGS.diesel.cost?'diesel':'solar';
   if (available<BUILDINGS[type].cost) return;
-  placeAiBuilding({type,x:-4,y:-3},yard,faction.team);
+  placeAiBuilding({type,x:-4,y:-3},site,faction.team);
 }
 
-function buildSupportFacilities(faction,yard,buildings) {
+function buildSupportFacilities(faction,site,buildings) {
   const plans=[{type:'recreation',x:-5,y:0},{type:'training',x:-1,y:-5}];
   const next=plans.find(plan=>!buildings.some(building=>building.type===plan.type));
   if (!next || faction.credits<BUILDINGS[next.type].cost+275) return;
-  placeAiBuilding(next,yard,faction.team);
+  placeAiBuilding(next,site,faction.team);
 }
 
 function advanceProduction(dt) {
@@ -4780,24 +4785,32 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
   }
 }
 
-function placeAiBuilding(plan,yard,team) {
+function constructionOrigin(site) {
+  const center=yardCenter(site);
+  return {x:Math.round(center.x),y:Math.round(center.y)};
+}
+
+function placeAiBuilding(plan,site,team) {
+  const spec=BUILDINGS[plan.type];
   const accounts=treasury(team);
-  if (accounts.credits<BUILDINGS[plan.type].cost) return false;
-  const origin={x:yard.x+1,y:yard.y+1};
+  if (accounts.credits<spec.cost || !readyConstructionSite(site,team)) return false;
+  const origin=constructionOrigin(site);
   const preferred={x:origin.x+plan.x,y:origin.y+plan.y};
+  const radius=plan.radius??BUILD_RADIUS;
   const candidates=plan.type==='wall'?[{...preferred,axis:plan.axis}]:[];
   if (plan.type!=='wall') {
-    for (let dx=-BUILD_RADIUS;dx<=BUILD_RADIUS;dx++) {
-      for (let dy=-BUILD_RADIUS;dy<=BUILD_RADIUS;dy++) {
+    const limit=Math.ceil(radius);
+    for (let dx=-limit;dx<=limit;dx++) {
+      for (let dy=-limit;dy<=limit;dy++) {
         const tile={x:origin.x+dx,y:origin.y+dy};
         if (onMap(tile.x,tile.y)) candidates.push(tile);
       }
     }
     candidates.sort((a,b)=>distanceTo(a,preferred)-distanceTo(b,preferred));
   }
-  const spec=BUILDINGS[plan.type];
   for (const tile of candidates) {
-    if (!withinYard(placementBounds({type:plan.type,...tile,width:spec.width,height:spec.height}),yard)) continue;
+    const box=placementBounds({type:plan.type,...tile,width:spec.width,height:spec.height});
+    if (!withinConstructionRadius(box,site,radius)) continue;
     const building=beginConstruction(plan.type,tile,team);
     if (!building) continue;
     if (plan.rush) building.rushUntil=game.time+1;
@@ -4808,13 +4821,13 @@ function placeAiBuilding(plan,yard,team) {
   return false;
 }
 
-function rushDefenses(faction,yards,buildings,contacts,raid) {
-  const distance=yard=>distanceTo(yardCenter(yard),raid.point);
-  const yard=yards.filter(yard=>readyYard(yard,faction.team) && distance(yard)<=BASE_DEFENSE_RADIUS)
+function rushDefenses(faction,sites,buildings,contacts,raid) {
+  const distance=building=>distanceTo(yardCenter(building),raid.point);
+  const site=sites.filter(building=>distance(building)<=BASE_DEFENSE_RADIUS)
     .sort((a,b)=>distance(a)-distance(b))[0];
-  if (!yard) return;
+  if (!site) return false;
 
-  const defenses=baseFacilities(yard,yards,buildings).filter(building=>EMERGENCY_DEFENSE_TYPES.has(building.type));
+  const defenses=buildings.filter(building=>EMERGENCY_DEFENSE_TYPES.has(building.type) && distance(building)<=BUILD_RADIUS);
   const buildingNow=defenses.filter(building=>building.remaining>0);
   for (const building of buildingNow) building.rushUntil=game.time+1;
   if (buildingNow.length) return true;
@@ -4825,7 +4838,7 @@ function rushDefenses(faction,yards,buildings,contacts,raid) {
   const front=attackers.includes(raid.attacker)?raid.attacker:nearestOpponent({...raid.point,team:faction.team},
     attackers,BASE_DEFENSE_RADIUS);
   const incoming=front?targetPoint(raid.point,front):raid.point;
-  const center=yardCenter(yard);
+  const center=yardCenter(site);
   const length=distanceTo(incoming,center);
   const x=length>.1?Math.round((incoming.x-center.x)*6/length):5;
   const y=length>.1?Math.round((incoming.y-center.y)*6/length):1;
@@ -4836,14 +4849,16 @@ function rushDefenses(faction,yards,buildings,contacts,raid) {
   const preferLaser=airRaid || (laserReady && defenses.length>0 && !defenses.some(building=>building.type==='laser'));
   const types=preferLaser?(airRaid?['laser']:['laser','turret']):['turret'];
   for (const type of types) {
-    if (placeAiBuilding({type,x,y,rush:true},yard,faction.team)) return true;
+    if (placeAiBuilding({type,x,y,rush:true},site,faction.team)) return true;
   }
   return false;
 }
 
-function protectFacilities(faction,yard,buildings,threat) {
-  const important=buildings.filter(building=>['yard','refinery','factory','barracks','solar','diesel'].includes(building.type) &&
-    distanceTo(yardCenter(building),yardCenter(yard))<=9);
+function protectFacilities(faction,site,buildings,threat) {
+  const center=yardCenter(site);
+  const important=buildings.filter(building=>['yard','refinery','factory','barracks','solar','diesel','oil'].includes(building.type) &&
+    distanceTo(yardCenter(building),center)<=9);
+  if (!important.length) return false;
   const envelopes=important.map(placementBounds);
   const left=Math.floor(Math.min(...envelopes.map(box=>box.left)))-1;
   const right=Math.ceil(Math.max(...envelopes.map(box=>box.right)))+1;
@@ -4862,13 +4877,13 @@ function protectFacilities(faction,yard,buildings,threat) {
   const walls=buildings.filter(building=>building.type==='wall');
   const rank=tile=>distanceTo(tile,threat)-walls.filter(wall=>distanceTo(tile,wall)===1).length*6;
   perimeter.sort((a,b)=>rank(a)-rank(b));
-  const origin={x:yard.x+1,y:yard.y+1};
+  const origin=constructionOrigin(site);
   return perimeter.some(tile=>placeAiBuilding({type:'wall',x:tile.x-origin.x,y:tile.y-origin.y,axis:tile.axis},
-    yard,faction.team));
+    site,faction.team));
 }
 
-function buildDefenses(faction,yard,buildings,contacts) {
-  const center=yardCenter(yard);
+function buildDefenses(faction,site,buildings,contacts) {
+  const center=yardCenter(site);
   const nearby=contacts.filter(unit=>!unit.width && isArmyType(unit.type) && distanceTo(unit,center)<10);
   const armorNearby=nearby.some(armoredTarget);
   const weapons=buildings.filter(b=>BUILDINGS[b.type]?.weapon);
@@ -4889,8 +4904,8 @@ function buildDefenses(faction,yard,buildings,contacts) {
       const type=canAddLaser?'laser':armorNearby?'turret':'bunker';
       const side=weapons.length%2 ? -1 : 1;
       const plan={type,x:line.x+(alongX?0:side*2),y:line.y+(alongX?side*2:0)};
-      if (placeAiBuilding(plan,yard,faction.team)) return;
-      if (weapons.length===0 && placeAiBuilding({...plan,type:'sentry'},yard,faction.team)) return;
+      if (placeAiBuilding(plan,site,faction.team)) return;
+      if (weapons.length===0 && placeAiBuilding({...plan,type:'sentry'},site,faction.team)) return;
     }
   }
 
@@ -4899,13 +4914,13 @@ function buildDefenses(faction,yard,buildings,contacts) {
   const wallReserve=conservative?220:guarding?180:460;
   if (walls.length<wallLimit && !walls.some(underConstruction) && faction.credits>=BUILDINGS.wall.cost+wallReserve &&
       (guarding || conservative || nearby.length)) {
-    if (conservative && protectFacilities(faction,yard,buildings,threat)) return;
+    if (conservative && protectFacilities(faction,site,buildings,threat)) return;
     // Leave the center lane open and place two short wings across the approach.
     for (const forward of [0,1,-1,2]) {
       for (const side of [-1,-2,1,2,-3,3,-4,4]) {
         const plan={type:'wall',axis:line.axis,x:line.x+(alongX?forward*direction:side),
           y:line.y+(alongX?side:forward*direction)};
-        if (placeAiBuilding(plan,yard,faction.team)) return;
+        if (placeAiBuilding(plan,site,faction.team)) return;
       }
     }
   }
@@ -4914,7 +4929,19 @@ function buildDefenses(faction,yard,buildings,contacts) {
   const missing=defenseBuildPlan.filter(plan=>!buildings.some(b=>b.type===plan.type));
   const defense=missing.find(plan=>armorNearby && plan.type==='turret')??missing[0];
   if (defense && faction.credits>=BUILDINGS[defense.type].cost+(nearby.length?250:defense.type==='laser'?350:600)) {
-    placeAiBuilding(defense,yard,faction.team);
+    placeAiBuilding(defense,site,faction.team);
+  }
+}
+
+function fortifyOilfields(faction,buildings) {
+  const sentry=BUILDINGS.sentry;
+  if (faction.credits<sentry.cost+PRODUCTS.tank.cost) return;
+  const defenses=structures.filter(building=>building.team===faction.team && building.health>0 && BUILDINGS[building.type]?.weapon);
+  for (const field of buildings) {
+    if (field.type!=='oil' || !readyConstructionSite(field,faction.team)) continue;
+    const center=yardCenter(field);
+    if (defenses.some(building=>distanceTo(yardCenter(building),center)<=BUILDINGS[building.type].weapon.range)) continue;
+    if (placeAiBuilding({type:'sentry',x:3,y:0,radius:sentry.weapon.range},field,faction.team)) return;
   }
 }
 
@@ -5177,7 +5204,7 @@ function directSpecialAircraft(faction,members,intelligence,raid) {
   }
 }
 
-function reserveForPriorityAircraft(faction,yards,airport,members,hasIncome) {
+function reserveForPriorityAircraft(faction,sites,airport,members,hasIncome) {
   const orders=faction.priorityAircraft;
   while (orders?.length && members.some(unit=>unit.type===orders[0])) orders.shift();
   if (orders && !orders.length) delete faction.priorityAircraft;
@@ -5191,11 +5218,10 @@ function reserveForPriorityAircraft(faction,yards,airport,members,hasIncome) {
     }
     return hasIncome;
   }
-  const ready=yards.filter(yard=>readyYard(yard,faction.team));
-  if (!ready.length) return false;
+  if (!sites.length) return false;
   if (faction.credits>=BUILDINGS.airport.cost && game.time>=(faction.nextAirportSiteCheck??0)) {
     faction.nextAirportSiteCheck=game.time+2;
-    ready.some(yard=>placeAiBuilding({type:'airport',x:5,y:-4},yard,faction.team));
+    sites.some(site=>placeAiBuilding({type:'airport',x:5,y:-4},site,faction.team));
   }
   return hasIncome;
 }
@@ -5299,7 +5325,11 @@ function advanceFaction(faction) {
   const yards=buildings.filter(building=>building.type==='yard');
   const yard=yards[0];
   deployBaseVehicles(faction,members,yards);
-  const local=yard?baseFacilities(yard,yards,buildings):buildings;
+  const sites=buildings.filter(building=>readyConstructionSite(building,team));
+  const readyYards=sites.filter(building=>building.type==='yard');
+  const constructionSite=readyYards[0]??sites.find(building=>building.type!=='wall')??sites[0];
+  const productionSites=readyYards.length?readyYards:constructionSite?[constructionSite]:[];
+  const local=readyYards.length?baseFacilities(readyYards[0],yards,buildings):buildings;
   const refinery=buildings.find(building=>refineryReady(building,team));
   const factories=buildings.filter(building=>building.type==='factory');
   const idleFactories=factories.filter(building=>!building.remaining && !building.queue.length);
@@ -5316,8 +5346,9 @@ function advanceFaction(faction) {
   const raid=urgentRaid(faction,intelligence.contacts);
   const hasIncome=Boolean(refinery && (refinery.pendingGift || members.some(unit=>unit.type==='miner'))) ||
     buildings.some(building=>building.type==='oil');
-  const reservingAircraft=reserveForPriorityAircraft(faction,yards,airport,members,hasIncome);
-  const rushingDefenses=!reservingAircraft && raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
+  const reservingAircraft=reserveForPriorityAircraft(faction,productionSites,airport,members,hasIncome);
+  const rushingDefenses=!reservingAircraft && (raid?.critical || raid?.target.type==='oil') &&
+    rushDefenses(faction,sites,buildings,intelligence.contacts,raid);
   if (!raid?.critical) advanceMounts(faction,members);
   reviewCommander(faction,army,buildings,members,intelligence,raid);
   directSpecialAircraft(faction,members,intelligence,raid);
@@ -5326,11 +5357,11 @@ function advanceFaction(faction) {
     advanceAiCapture(faction,barracks,members,false);
     return;
   }
-  if (!depots.length && factory && yard?.remaining===0 &&
+  if (!depots.length && factory && constructionSite &&
       (tanks.some(unit=>unit.health<WEAPONS[unit.type].health) || tanks.length>=3) &&
       faction.credits>=BUILDINGS.repairDepot.cost+120 && game.time>=(faction.nextGarageBuild??0)) {
     faction.nextGarageBuild=game.time+3;
-    placeAiBuilding({type:'repairDepot',x:-4,y:3},yard,team);
+    placeAiBuilding({type:'repairDepot',x:-4,y:3},constructionSite,team);
   }
   if (barracks && !barracks.queue.length && openingReconAllowed(faction,intelligence,raid) &&
       !army.some(isFastScout)) enqueue(barracks,'dog');
@@ -5349,8 +5380,8 @@ function advanceFaction(faction) {
     }
   }
   const nextBase=baseBuildPlan.find(plan=>!local.some(b=>b.type===plan.type));
-  if (yard?.remaining===0 && nextBase && (nextBase.type==='refinery' || refinery)) {
-    placeAiBuilding(nextBase,yard,team);
+  if (constructionSite && nextBase && (nextBase.type==='refinery' || refinery)) {
+    placeAiBuilding(nextBase,constructionSite,team);
   }
   const plan=faction.commander.plan;
   const aircraft=members.filter(isAirborne);
@@ -5359,9 +5390,9 @@ function advanceFaction(faction) {
     'bomber':!aircraft.some(unit=>unit.type==='reconPlane')?'reconPlane':
     !aircraft.some(unit=>unit.type==='helicopter')?'helicopter':'bomber';
   const developingAir=plan?.task==='airpower' && !raid?.critical && !faction.defensive;
-  if (developingAir && !airport && yard?.remaining===0 && !nextBase &&
+  if (developingAir && !airport && constructionSite && !nextBase &&
       faction.credits>=BUILDINGS.airport.cost+PRODUCTS.soldier.cost) {
-    if (placeAiBuilding({type:'airport',x:5,y:-4},yard,team)) {
+    if (placeAiBuilding({type:'airport',x:5,y:-4},constructionSite,team)) {
       log(factionName(team)+'开始建设机场。',team);
     }
   }
@@ -5372,25 +5403,25 @@ function advanceFaction(faction) {
   const savingForAir=developingAir && !aircraft.length && !airport?.queue.length;
   if (!raid?.critical && !faction.defensive && plan?.task==='industry' && factories.length<plan.goal &&
       faction.credits>=BUILDINGS.factory.cost+PRODUCTS.tank.cost) {
-    if (yards.some(base=>readyYard(base,team) && placeAiBuilding({type:'factory',x:-5,y:-3},base,team))) {
+    if (productionSites.some(site=>placeAiBuilding({type:'factory',x:-5,y:-3},site,team))) {
       log(factionName(team)+'开工建设另一座兵工厂。',team);
     }
   }
 
   let savingForResearch=false;
-  if (yard?.remaining===0) maintainPower(faction,yard,savingForEarlyMiner?PRODUCTS.miner.cost:0);
+  if (constructionSite) maintainPower(faction,constructionSite,savingForEarlyMiner?PRODUCTS.miner.cost:0);
   if (!raid?.critical && !nextBase) developOutposts(faction,yards,buildings);
   const wantsExpansion=faction.orders.task==='mine' || (faction.credits>=2800 && faction.orders.mode==='develop');
   const savingForExpansion=!raid?.critical && (!yard || !nextBase && wantsExpansion) &&
     planExpansion(faction,yards,members,factory,army);
-  const canBuildDefenses=yard?.remaining===0 && !nextBase && !savingForExpansion;
+  const canBuildDefenses=constructionSite && !nextBase && !savingForExpansion;
   if (!raid?.critical && !savingForEarlyMiner && !savingForAir && canBuildDefenses) {
-    if (faction.orders.task==='fortify' || faction.defensive) buildDefenses(faction,yard,buildings,intelligence.contacts);
+    if (faction.orders.task==='fortify' || faction.defensive) buildDefenses(faction,constructionSite,buildings,intelligence.contacts);
     if (!faction.defensive && army.length>=2 && game.time>=52 && faction.credits>=1000) {
-      buildSupportFacilities(faction,yard,buildings);
+      buildSupportFacilities(faction,constructionSite,buildings);
     }
-    if (!faction.defensive && (faction.orders.task==='research' || faction.credits>=950)) {
-      savingForResearch=planResearch(faction,yard,faction.orders.task==='research');
+    if (readyYards.length && !faction.defensive && (faction.orders.task==='research' || faction.credits>=950)) {
+      savingForResearch=planResearch(faction,readyYards[0],faction.orders.task==='research');
     }
   }
 
@@ -5434,7 +5465,11 @@ function advanceFaction(faction) {
     }
   }
 
-  if (raid?.critical && canBuildDefenses && !rushingDefenses) buildDefenses(faction,yard,buildings,intelligence.contacts);
+  if (raid?.critical && canBuildDefenses && !rushingDefenses) {
+    buildDefenses(faction,constructionSite,buildings,intelligence.contacts);
+  }
+  if (!raid?.critical && !rushingDefenses && !nextBase && !savingForEarlyMiner && !savingForAir &&
+      !savingForExpansion && !savingForResearch) fortifyOilfields(faction,buildings);
 }
 
 function distanceTo(a,b) {
@@ -6048,12 +6083,13 @@ function syncBuildMenu() {
   } else if (building.type==='repairDepot') {
     status=building.serviceStatus??'接收受损坦克';
   } else if (building.type==='yard') {
-    status='建造半径 '+BUILD_RADIUS+' 格';
+    status='已部署';
   }
   byId('building-name').textContent=buildingCaption(building);
   if (spec.powerUse && building.team===game.perspective && !building.remaining) {
     status+=' · 耗电 '+spec.powerUse;
   }
+  if (readyConstructionSite(building,game.perspective)) status+=' · 建造半径 '+BUILD_RADIUS+' 格';
   if (spec.defense) status+=' · 防御减伤 '+Math.round(defenseOf(building)*100)+'%';
   if (building.type==='factory' && building.team===game.perspective && !building.remaining) {
     const bonus=Math.round(FACTIONS[building.team].factoryBonus*100);
