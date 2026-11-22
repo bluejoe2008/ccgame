@@ -335,7 +335,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=jiangnan';
+  script.src = 'game.js?v=mountain-campaign';
   document.head.append(script);
 }
 bootObserver();

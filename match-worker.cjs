@@ -239,6 +239,8 @@ function observation(team) {
       goal: unit.goal && (unit.team === team || !['bomber','reconPlane','helicopter'].includes(unit.type))
         ? pick(unit.goal, ['x','y','kind']) : null,
       route: unit.team === team ? unit.route : [],
+      marchLeader: unit.team===team && unit.marchGroup?.leader===unit,
+      marchSize: unit.team===team ? unit.marchGroup?.members.length??null : null,
       passengerCount: unit.team === team && unit.passengers ? unit.passengers.length : null,
       serviceActive: unit.team === team && Boolean(unit.serviceDepot),
       attackId: visibleId(unit.attackTarget), captureId: visibleId(unit.captureTarget), scentId: visibleId(unit.scentTarget),

@@ -51,16 +51,16 @@ const MAP_SEED=globalThis.matchEngine?.seed??globalThis.matchBootstrap?.seed??
   crypto.getRandomValues(new Uint32Array(1))[0];
 const BOARD={left:-51*U,right:51*U,top:-47*V,bottom:47*V};
 const SURFACES = {
-  field:[118,136,93,0,.69,0], meadow:[138,155,105,0,1,0], scrub:[86,113,79,0,.8,.08],
-  dirt:[154,134,104,0,.22,.72], road:[142,123,99,0,.07,.40],
-  concrete:[125,132,129,0,0,.40], bank:[162,149,112,.10,.14,.38],
-  water:[57,87,78,1,0,0], rock:[122,122,104,0,.1,1], hill:[109,130,96,0,.76,.38],
-  bridge:[109,118,116,0,0,.35],
+  field:[123,133,87,0,.74,0], meadow:[143,150,95,0,1,0], scrub:[82,104,67,0,.86,.08],
+  dirt:[158,126,92,0,.16,.63], road:[147,111,78,0,.04,.32],
+  concrete:[130,128,114,0,0,.40], bank:[153,133,99,.10,.14,.38],
+  water:[51,76,78,1,0,0], rock:[119,112,99,0,.08,1], hill:[106,117,79,0,.70,.58],
+  bridge:[116,88,63,0,0,.22],
 };
 const COLORS = {
-  field: '#778a5f', meadow: '#8f9d6c', scrub: '#527150', dirt: '#9b8668', road: '#927b62',
-  concrete: '#7d8481', bank: '#a89771', water: '#3b655d', rock: '#77796b', hill:'#6c845f',
-  bridge: '#788583',
+  field: '#808a57', meadow: '#939960', scrub: '#536746', dirt: '#a18360', road: '#986f4e',
+  concrete: '#898371', bank: '#a48b65', water: '#416167', rock: '#7d7566', hill:'#6d7b50',
+  bridge: '#9b7858',
 };
 
 const deposits = new Map();
@@ -133,7 +133,7 @@ const BUILDINGS = {
     weapon:{range:4.2,damage:18,reload:.48,height:26,armorFactor:.55},priority:'soft'},
   laser:{label:'激光塔',cost:650,time:7.2,width:2,height:2,roof:100,body:65,health:320,defense:.16,powerUse:65,color:'#9bd9d1',
     weapon:{range:6.7,damage:30,reload:1.22,height:82,effect:'laser',armorFactor:1.22,softFactor:.68},priority:'armor'},
-  solar:{label:'太阳能电站',cost:300,time:4.3,width:2,height:2,roof:48,body:32,health:230,powerOutput:90,color:'#89acc0'},
+  solar:{label:'风力电站',cost:300,time:4.3,width:2,height:2,roof:48,body:32,health:230,powerOutput:90,color:'#89acc0'},
   diesel:{label:'燃油发电厂',cost:600,time:6,width:3,height:2,roof:83,body:53,health:370,powerOutput:180,color:'#a9b6b1'},
   recreation:{label:'棋牌室',cost:240,time:4,width:2,height:2,roof:53,body:35,health:240,
     powerUse:12,fireRateBonus:.08,color:'#aba489'},
@@ -216,6 +216,8 @@ let nextUnitId=5;
 const camera={x:blueOrigin.x+1.8,y:blueOrigin.y+2.6};
 const viewport = {w: 0, h: 0, dpr: 1, get scale() { return this.w<610 ? .49 : .70; }};
 const radarViewport = {w: 0, h: 0, dpr: 1};
+const radarTerrain=ENGINE_ONLY?null:document.createElement('canvas');
+let radarTerrainCache=null;
 const game = {
   selection:[], selectedBuilding:null, hoverTarget:null, time:0,
   perspective:'player', outcome:null,
@@ -711,6 +713,7 @@ const unitSpriteWidths={
   horse:[54,49,47,24], cavalry:[31,26,24,23], mountedCavalry:[59,54,52,30],
   fighter:[109,110,108,91],
 };
+const periodUnitHeights={soldier:42,engineer:39,rocketeer:43,mortar:41,cavalry:40,mountedCavalry:57};
 const TANK_HULL_POSES=[
   {rect:[22,190,282,154],mount:[172,229],width:89,ground:17},
   {rect:[336,148,268,217],mount:[478,225],width:83,ground:24},
@@ -729,9 +732,9 @@ const TANK_TURRET_POSES=[
   {rect:[959,900,268,193],mount:[1051,1064],width:78},
 ];
 const buildingSpriteWidths={yard:205,refinery:232,factory:205,repairDepot:188,barracks:163,airport:270,
-  oil:148,sentry:82,turret:157,bunker:128,wall:56,laser:132,solar:147,diesel:199,recreation:116,training:201};
+  oil:148,sentry:77,turret:155,bunker:135,wall:59,laser:96,solar:113,diesel:199,recreation:136,training:201};
 // The server uses the same optical emitter position when creating a laser effect.
-const LASER_ART={aspect:420/262,emitter:[.51,.20]};
+const LASER_ART={aspect:360/185,emitter:[.45,.245]};
 let poorOreArt=null;
 let groundTexture=null;
 if (!ENGINE_ONLY) {
@@ -740,16 +743,19 @@ for (const tint of ['blue','red']) {
 }
 for (const type of Object.keys(unitSpriteWidths)) {
   for (let facing=0;facing<4;facing++) {
-    for (const tint of ['blue','red']) asset(type+'-'+facing+'-'+tint);
+    for (const tint of ['blue','red']) {
+      const key=type+'-'+facing+'-'+tint;
+      asset(key,periodUnitHeights[type]?'mountain-'+key:key);
+    }
   }
 }
 for (const type of Object.keys(buildingSpriteWidths)) {
-  if (type==='wall') continue;
-  for (const tint of ['blue','red']) asset(type+'-'+tint,'jiangnan-'+type+'-'+tint);
+  for (const variant of type==='wall'?['wall-x','wall-y']:[type]) {
+    for (const tint of ['blue','red']) asset(variant+'-'+tint,'mountain-'+variant+'-'+tint);
+  }
 }
-for (const axis of ['x','y']) asset('wall-'+axis,'jiangnan-wall-'+axis);
-asset('oil-neutral','jiangnan-oil-neutral');
-for (const name of ['bamboo','pine','reeds','limestone','karst','river-stones']) asset(name,'jiangnan-'+name);
+asset('oil-neutral','mountain-oil-neutral');
+for (const name of ['fir','pine','reeds','granite','bluff','river-stones']) asset(name,'mountain-'+name);
 const oreImage=asset('ore');
 oreImage.addEventListener('load',()=>{
   const image=document.createElement('canvas');
@@ -761,7 +767,7 @@ oreImage.addEventListener('load',()=>{
   poorOreArt=image;
 });
 
-const groundImage=asset('ground','jiangnan-ground');
+const groundImage=asset('ground','mountain-ground');
 groundImage.addEventListener('load',()=>{
   const source=document.createElement('canvas');
   source.width=groundImage.width;
@@ -769,13 +775,13 @@ groundImage.addEventListener('load',()=>{
   const painter=source.getContext('2d');
   painter.drawImage(groundImage,0,0);
   const {data}=painter.getImageData(0,0,source.width,source.height);
-  const cell=source.width/2;
-  groundTexture=Array.from({length:4},(_,material)=>{
+  const cell=256,columns=source.width/cell;
+  groundTexture=Array.from({length:6},(_,material)=>{
     const samples=new Float32Array(cell*cell);
     let total=0;
     for (let y=0;y<cell;y++) {
       for (let x=0;x<cell;x++) {
-        const i=((y+Math.floor(material/2)*cell)*source.width+x+material%2*cell)*4;
+        const i=((y+Math.floor(material/columns)*cell)*source.width+x+material%columns*cell)*4;
         const light=data[i]*.213+data[i+1]*.715+data[i+2]*.072;
         samples[y*cell+x]=light;
         total+=light;
@@ -794,7 +800,7 @@ groundImage.addEventListener('error',()=>{
 });
 }
 
-function groundDetail(sx,sy,grass,wet,concrete) {
+function groundDetail(sx,sy,grass,wet,concrete,rock,bridge) {
   if (!groundTexture) return 0;
   // Alternate reflected tiles so world-coordinate sampling meets without seams.
   const fold=value=>{
@@ -802,7 +808,9 @@ function groundDetail(sx,sy,grass,wet,concrete) {
     return i<256?i:511-i;
   };
   const index=fold(sy*.88)*256+fold(sx*.88);
-  const dry=mix(mix(groundTexture[1][index],groundTexture[0][index],grass),
+  if (bridge) return groundTexture[4][fold(sy*1.7)*256+fold(sx*.78)];
+  const earth=mix(groundTexture[1][index],groundTexture[5][index],rock*.8);
+  const dry=mix(mix(earth,groundTexture[0][index],grass),
     groundTexture[3][index],concrete);
   return mix(dry,groundTexture[2][index],wet);
 }
@@ -874,11 +882,11 @@ function paintTerrainChunk(cx,cy,tile,step=TEXTURE_STEP) {
         (speck>.984?10+rock*12:speck<.013?-11:0);
       const reflection=Math.max(0,waterLines-.33)*(2+fleck*8);
       const moist=macro*17+waterLines*(1.9+granule*3)+patches*11+(speck-.5)*6+reflection;
-      const concrete=bridge?1:mix(mix(Number(a===SURFACES.concrete),Number(b===SURFACES.concrete),fx),
+      const concrete=mix(mix(Number(a===SURFACES.concrete),Number(b===SURFACES.concrete),fx),
         mix(Number(c===SURFACES.concrete),Number(d===SURFACES.concrete),fx),fy);
       const elevation=hasRelief?heightAt(w.x,w.y):0;
       const relief=elevation?2.4*(heightAt(w.x+.4,w.y+.25)-heightAt(w.x-.4,w.y-.25))+elevation*.16:0;
-      const detail=detailed?groundDetail(sx,sy,grass,wet,concrete)*.76:0;
+      const detail=detailed?groundDetail(sx,sy,grass,wet,concrete,rock,bridge)*.76:0;
       const shade=mix(dry,moist,wet)*((groundTexture || !detailed) ? .66 : 1)+shore-sediment+relief+detail;
       const index=(py*tile.width+px)*4;
       const asphalt=bridge?SURFACES.bridge:null;
@@ -908,7 +916,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=jiangnan');
+      const worker=new Worker('terrain-worker.js?v=mountain-campaign');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2027,13 +2035,14 @@ function renderUnit(context,unit,origin) {
   const angle=Math.atan2(forward.y,Math.abs(forward.x));
   const facing=angle<-.22?2:angle<.22?0:angle>1.02?3:1;
   const spriteType=isAirborne(unit)?'fighter':unit.type;
-  const width=unitSpriteWidths[spriteType][facing]*(unit.type==='bomber'?1.15:unit.type==='reconPlane'?.80:1);
+  const spriteWidth=unitSpriteWidths[spriteType][facing]*(unit.type==='bomber'?1.15:unit.type==='reconPlane'?.80:1);
   const offset=wheeled?[12,25,20,31][facing]:quadruped?[3,8,6,8][facing]:2;
   const mirror=forward.x<0 && facing!==3;
   if (unit.type==='tank' && drawTankAssembly(context,unit,origin,facing,mirror,strength)) return;
   const image=sprites.get(spriteType+'-'+facing+'-'+factionTint(unit.team));
   if (image?.naturalWidth) {
-    const height=width*image.naturalHeight/image.naturalWidth;
+    const height=periodUnitHeights[spriteType]??spriteWidth*image.naturalHeight/image.naturalWidth;
+    const width=height*image.naturalWidth/image.naturalHeight;
     const bodyBob=wheeled?Math.sin(travel*14)*.48*strength:0;
     context.save();
     context.translate(origin.x,origin.y+offset+bodyBob);
@@ -2178,7 +2187,8 @@ function constructionFrame(image) {
 function structureArt(building) {
   const {type}=building;
   const tint=building.team==='neutral'?'neutral':factionTint(building.team);
-  const image=sprites.get(type==='wall'?'wall-'+(building.axis??'x'):type+'-'+tint);
+  const variant=type==='wall'?'wall-'+(building.axis??'x'):type;
+  const image=sprites.get(variant+'-'+tint);
   const position=yardCenter(building);
   const center=project(position.x,position.y);
   const width=buildingSpriteWidths[type];
@@ -2191,23 +2201,23 @@ function structureArt(building) {
 
 // Operating effects sit on features shared by the two painted faction variants.
 const buildingLights={
-  yard:[[.34,.61],[.43,.62],[.94,.13]],
-  factory:[[.31,.57],[.44,.61],[.57,.64]],
-  repairDepot:[[.72,.49],[.66,.53]],
-  refinery:[[.48,.55],[.86,.68]],
-  barracks:[[.32,.34],[.50,.36],[.72,.40]],
-  airport:[[.79,.16],[.06,.91],[.13,.82],[.21,.73],[.56,.92],[.61,.83],[.66,.74]],
-  solar:[[.65,.25]],
-  diesel:[[.40,.72],[.53,.73],[.65,.71]],
-  oil:[[.82,.65]],
-  sentry:[[.46,.35]],
-  turret:[[.42,.07]],
-  bunker:[[.57,.50]],
+  yard:[[.46,.70],[.55,.75]],
+  factory:[[.47,.52],[.60,.54]],
+  repairDepot:[[.44,.44],[.64,.54]],
+  refinery:[[.65,.61],[.88,.60]],
+  barracks:[[.45,.32],[.65,.36]],
+  airport:[[.06,.80],[.17,.64],[.35,.40],[.48,.92],[.70,.62],[.83,.38]],
+  solar:[[.39,.82]],
+  diesel:[[.54,.76],[.67,.72],[.74,.74]],
+  oil:[[.63,.48]],
+  sentry:[[.43,.38]],
+  turret:[[.39,.43]],
+  bunker:[[.58,.49]],
   laser:[LASER_ART.emitter],
-  recreation:[[.42,.66],[.62,.72]],
-  training:[[.51,.80]],
+  recreation:[[.132,.48],[.66,.51]],
+  training:[[.51,.85]],
 };
-const buildingStacks={diesel:[[.16,.056],[.25,.023]],refinery:[[.18,.018],[.27,.067]]};
+const buildingStacks={diesel:[[.096,.092],[.19,.102]],refinery:[[.075,.022],[.167,.091]]};
 const buildingEffectSprites=new Map();
 
 function drawBuildingGlow(context,color,x,y,rx,ry,intensity) {
@@ -2249,8 +2259,8 @@ function drawBuildingActivity(context,building,art) {
 
   if (type==='oil' || type==='diesel') {
     const oil=type==='oil';
-    const x=art.left+art.width*(oil?.47:.54);
-    const y=art.top+art.height*(oil?.52:.74);
+    const x=art.left+art.width*(oil?.22:.72);
+    const y=art.top+art.height*(oil?.62:.74);
     const radius=oil?5:4;
     context.beginPath();
     for (let i=0;i<3;i++) {
@@ -2612,18 +2622,18 @@ function drawWorld() {
       }});
       else if (kind==='rock' || (kind==='hill' && seed>.91)) {
         objects.push({depth:x+y+.04,fade,draw:()=> {
-          const karst=kind==='rock' && seed>.80;
-          if (sprite(ctx,karst?'karst':'limestone',p.x,p.y+8,
-            karst?54+seed*16:kind==='hill'?26+seed*8:57+seed*19,seed>.5)) return;
+          const bluff=kind==='rock' && seed>.77;
+          if (sprite(ctx,bluff?'bluff':'granite',p.x,p.y+8,
+            bluff?68+seed*25:kind==='hill'?27+seed*8:52+seed*19,seed>.5)) return;
           stone(ctx,{x:p.x-14,y:p.y+1},1.07,seed>.54);
           stone(ctx,{x:p.x+8,y:p.y-4},1.19,seed>.64);
           stone(ctx,{x:p.x+18,y:p.y+4},.47,true);
         }});
       } else if (forestAt(x,y,kind)) {
         objects.push({depth:x+y+.13,fade,draw:()=> {
-          const bamboo=seed>.74;
-          if (sprite(ctx,bamboo?'bamboo':'pine',p.x+seed*10-5,p.y+7,
-            bamboo?36+seed*14:55+seed*22,seed>.86)) return;
+          const fir=seed>.74;
+          if (sprite(ctx,fir?'fir':'pine',p.x+seed*10-5,p.y+7,
+            fir?48+seed*18:55+seed*22,seed>.86)) return;
           pine(ctx,{x:p.x-8,y:p.y+1},.67+seed*.23,seed>.8);
           if (seed>.78) pine(ctx,{x:p.x+12,y:p.y+5},.59,seed>.91);
         }});
@@ -2738,14 +2748,6 @@ function drawWorld() {
 function terrainRadar() {
   const {w,h,dpr}=radarViewport;
   if (!w || !h) return;
-  radarCtx.setTransform(dpr,0,0,dpr,0,0);
-  radarCtx.fillStyle='#121b13';
-  radarCtx.fillRect(0,0,w,h);
-  radarCtx.lineWidth=.5;
-  for (let i=1;i<9;i++) {
-    stroke(radarCtx,i*w/9,0,i*w/9,h,'#798d6240',.5);
-    stroke(radarCtx,0,i*h/9,w,i*h/9,'#798d6230',.5);
-  }
   const width=BOARD.right-BOARD.left,height=BOARD.bottom-BOARD.top;
   const scale=Math.min((w-12)/width,(h-12)/height);
   const left=(w-width*scale)/2,top=(h-height*scale)/2;
@@ -2754,35 +2756,57 @@ function terrainRadar() {
     return {x:left+(p.x-BOARD.left)*scale,y:top+(p.y-BOARD.top)*scale};
   };
   game.radarLayout={left,top,scale};
+  const perspective=viewFaction();
+  const {explored}=perspective;
+  if (radarTerrainCache?.explored!==explored || radarTerrainCache.w!==w ||
+      radarTerrainCache.h!==h || radarTerrainCache.dpr!==dpr) {
+    radarTerrain.width=radar.width;
+    radarTerrain.height=radar.height;
+    const paint=radarTerrain.getContext('2d');
+    paint.setTransform(dpr,0,0,dpr,0,0);
+    paint.fillStyle='#121b13';
+    paint.fillRect(0,0,w,h);
+    for (let i=1;i<9;i++) {
+      stroke(paint,i*w/9,0,i*w/9,h,'#798d6240',.5);
+      stroke(paint,0,i*h/9,w,i*h/9,'#798d6230',.5);
+    }
+    paint.save();
+    paint.beginPath();
+    paint.rect(left,top,width*scale,height*scale);
+    paint.clip();
+    const paths=new Map();
+    const oreTiles=[];
+    const rx=U*scale+.1,ry=V*scale+.1;
+    for (const tile of explored.values()) {
+      const p=mapPoint(tile.x,tile.y);
+      const color=COLORS[terrain(tile.x,tile.y)];
+      if (!paths.has(color)) paths.set(color,new Path2D());
+      const path=paths.get(color);
+      path.moveTo(p.x,p.y-ry);
+      path.lineTo(p.x+rx,p.y);
+      path.lineTo(p.x,p.y+ry);
+      path.lineTo(p.x-rx,p.y);
+      path.closePath();
+      const deposit=seam(tile.x,tile.y);
+      if (deposit) oreTiles.push({x:tile.x,y:tile.y,p,grade:deposit.grade});
+    }
+    for (const [color,path] of paths) {
+      paint.fillStyle=color;
+      paint.fill(path);
+    }
+    paint.restore();
+    radarTerrainCache={explored,w,h,dpr,oreTiles};
+  }
+  radarCtx.setTransform(dpr,0,0,dpr,0,0);
+  radarCtx.drawImage(radarTerrain,0,0,w,h);
   radarCtx.save();
   radarCtx.beginPath();
   radarCtx.rect(left,top,width*scale,height*scale);
   radarCtx.clip();
-  const perspective=viewFaction();
-  const cells=perspective.explored.values();
-  const terrainPaths=new Map();
-  const rx=U*scale+.1,ry=V*scale+.1;
-  for (const tile of cells) {
-    const p=mapPoint(tile.x,tile.y);
-    const kind=terrain(tile.x,tile.y);
-    const color=COLORS[kind];
-    if (!terrainPaths.has(color)) terrainPaths.set(color,new Path2D());
-    const path=terrainPaths.get(color);
-    path.moveTo(p.x,p.y-ry);
-    path.lineTo(p.x+rx,p.y);
-    path.lineTo(p.x,p.y+ry);
-    path.lineTo(p.x-rx,p.y);
-    path.closePath();
-  }
-  for (const [color,path] of terrainPaths) {
-    radarCtx.fillStyle=color;
-    radarCtx.fill(path);
-  }
-  for (const item of perspective.explored.values()) {
-    const ore=amountAt(item.x,item.y);
+  for (const {x,y,p,grade} of radarTerrainCache.oreTiles) {
+    const ore=amountAt(x,y);
     if (!ore) continue;
-    radarCtx.fillStyle=ORE_GRADES[seam(item.x,item.y)?.grade??'poor'].color;
-    const p=mapPoint(item.x,item.y);
+    radarCtx.fillStyle=ORE_GRADES[grade].color;
     const size=Math.min(1.6,.65+ore*.002);
     radarCtx.fillRect(p.x-size,p.y-size,size*2,size*2);
   }
@@ -2841,6 +2865,41 @@ class MinHeap {
 const NEIGHBORS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
 const DETOUR_NODES_PER_TICK=320;
 let detourNodesLeft=Infinity;
+const PATH_COLUMNS=bounds.maxX-bounds.minX+3;
+const PATH_ROWS=bounds.maxY-bounds.minY+3;
+const pathCell=(x,y)=>(y-bounds.minY+1)*PATH_COLUMNS+x-bounds.minX+1;
+const pathTerrain=new Uint8Array(PATH_COLUMNS*PATH_ROWS).fill(255);
+let pathBuildings;
+let pathStructureCount=-1;
+
+function pathBuildingGrid() {
+  if (pathStructureCount!==structures.length) {
+    pathBuildings=new Uint8Array(PATH_COLUMNS*PATH_ROWS);
+    pathStructureCount=structures.length;
+    for (const building of structures) {
+      for (let y=Math.ceil(building.y);y<building.y+building.height;y++) {
+        for (let x=Math.ceil(building.x);x<building.x+building.width;x++) {
+          if (x>=bounds.minX && x<=bounds.maxX && y>=bounds.minY && y<=bounds.maxY) pathBuildings[pathCell(x,y)]=1;
+        }
+      }
+    }
+  }
+  return pathBuildings;
+}
+
+function groundPathCost(x,y,index) {
+  if (pathTerrain[index]===255) {
+    const kind=onMap(x,y)?terrain(x,y):'water';
+    pathTerrain[index]=kind==='water' || kind==='rock' || forestAt(x,y,kind)?0:kind==='hill'?2:1;
+  }
+  return pathTerrain[index];
+}
+
+function pathTileOpen(buildings,x,y) {
+  if (x<bounds.minX || x>bounds.maxX || y<bounds.minY || y>bounds.maxY) return false;
+  const index=pathCell(x,y);
+  return !buildings[index] && groundPathCost(x,y,index)!==0;
+}
 
 function findPath(destination,unit,avoidUnits=false,radius=8) {
   if (isAirborne(unit)) {
@@ -2848,23 +2907,33 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
         (avoidUnits && unitPathBlocked(unit,unit.x,unit.y,destination.x,destination.y))) return null;
     return distanceTo(unit,destination)<.04?[]:[{x:destination.x,y:destination.y}];
   }
+  if (!Number.isInteger(destination.x) || !Number.isInteger(destination.y)) return null;
   const here={x:Math.round(unit.x),y:Math.round(unit.y)};
   const inside=(x,y)=>Math.abs(x-here.x)<=radius && Math.abs(y-here.y)<=radius;
   if (avoidUnits && (!detourNodesLeft || !inside(destination.x,destination.y))) return null;
+  const buildings=pathBuildingGrid();
+  const open=(x,y)=>(!avoidUnits || inside(x,y)) && pathTileOpen(buildings,x,y);
+  if (!open(destination.x,destination.y)) return null;
   const obstacles=avoidUnits?units.filter(other=>other!==unit && other.health>0 &&
-    !isAirborne(other) && !canRunOver(unit,other) &&
-    Math.abs(other.x-here.x)<radius+1 && Math.abs(other.y-here.y)<radius+1):null;
-  const walkableCache=avoidUnits?new Map():null;
-  const open=(x,y)=>{
-    if (!walkableCache) return walkable(x,y);
-    if (!inside(x,y)) return false;
-    const key=tileKey(x,y);
-    if (!walkableCache.has(key)) walkableCache.set(key,walkable(x,y));
-    return walkableCache.get(key);
+    !isAirborne(other) && collisionLayerMatches(unit,other) && !canRunOver(unit,other) &&
+    Math.abs(other.x-here.x)<radius+1 && Math.abs(other.y-here.y)<radius+1)
+    .map(other=>({x:other.x,y:other.y,radiusSquared:(UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type])**2})):null;
+  const occupied=(x,y)=>obstacles.some(other=>
+    (x-other.x)**2+(y-other.y)**2<other.radiusSquared);
+  const blocked=(x,y,nx,ny)=>{
+    const dx=nx-x,dy=ny-y;
+    if (!dx && !dy) return false;
+    const travelSquared=dx*dx+dy*dy;
+    for (const other of obstacles) {
+      const ox=other.x-x,oy=other.y-y;
+      const projection=ox*dx+oy*dy;
+      if (ox*ox+oy*oy<other.radiusSquared && projection<=0) continue;
+      const along=Math.max(0,Math.min(1,projection/travelSquared));
+      if ((ox-dx*along)**2+(oy-dy*along)**2<other.radiusSquared) return true;
+    }
+    return false;
   };
-  const occupied=(x,y)=>unitPositionBlocked(unit,x,y,true,obstacles);
-  const blocked=(x,y,nx,ny)=>blockingUnit(unit,x,y,nx,ny,obstacles);
-  if (!open(destination.x,destination.y) || (avoidUnits && occupied(destination.x,destination.y))) return null;
+  if (avoidUnits && occupied(destination.x,destination.y)) return null;
   const queue=new MinHeap();
   const frontier=new Map();
   let starts=[here];
@@ -2875,7 +2944,7 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
       .filter(tile=>open(tile.x,tile.y) && !blocked(unit.x,unit.y,tile.x,tile.y));
   }
   for (const start of starts) {
-    const key=tileKey(start.x,start.y);
+    const key=pathCell(start.x,start.y);
     const g=avoidUnits?distanceTo(unit,start):0;
     frontier.set(key,{...start,g,previous:null});
     queue.push({key,score:g+distanceTo(start,destination),g});
@@ -2889,7 +2958,7 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
     if (sameTile(position,destination)) {
       const route=[];
       let node=position;
-      while (node.previous) {
+      while (node.previous!==null) {
         route.push({x:node.x,y:node.y});
         node=frontier.get(node.previous);
       }
@@ -2901,9 +2970,10 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
       if (!open(x,y) || (dx && dy &&
          (!open(position.x+dx,position.y) || !open(position.x,position.y+dy)))) continue;
       if (avoidUnits && blocked(position.x,position.y,x,y)) continue;
-      const nextKey=tileKey(x,y);
-      const effort=position.g+(dx&&dy ? Math.SQRT2 : 1)*(terrain(x,y)==='hill'?1.28:1);
-      if (frontier.has(nextKey) && frontier.get(nextKey).g<=effort) continue;
+      const nextKey=pathCell(x,y);
+      const effort=position.g+(dx&&dy ? Math.SQRT2 : 1)*(pathTerrain[nextKey]===2?1.28:1);
+      const existing=frontier.get(nextKey);
+      if (existing && existing.g<=effort) continue;
       frontier.set(nextKey,{x,y,g:effort,previous:current.key});
       queue.push({key:nextKey,g:effort,score:effort+Math.hypot(destination.x-x,destination.y-y)});
     }
@@ -2954,6 +3024,7 @@ function setCourse(target,kind,unit,course=findPath(target,unit)) {
   }
   if (kind!=='attack') unit.attackTarget=null;
   if (kind!=='capture') unit.captureTarget=null;
+  unit.marchGroup=null;
   unit.route=smoothCourse(unit,course);
   unit.goal={x:target.x,y:target.y,kind};
   unit.mode=kind==='dock'?'returning':'moving';
@@ -3466,10 +3537,12 @@ function turnTowards(unit,heading,turnRate,dt) {
 function groundPathOpen(fromX,fromY,toX,toY) {
   const dx=toX-fromX,dy=toY-fromY;
   const samples=Math.max(1,Math.ceil(Math.hypot(dx,dy)/.18));
+  const buildings=pathBuildingGrid();
   let prevX=Math.round(fromX),prevY=Math.round(fromY);
   for (let i=1;i<=samples;i++) {
     const x=Math.round(fromX+dx*i/samples),y=Math.round(fromY+dy*i/samples);
-    if (!walkable(x,y) || (x!==prevX && y!==prevY && (!walkable(x,prevY) || !walkable(prevX,y)))) {
+    if (!pathTileOpen(buildings,x,y) || (x!==prevX && y!==prevY &&
+        (!pathTileOpen(buildings,x,prevY) || !pathTileOpen(buildings,prevX,y)))) {
       return false;
     }
     prevX=x;
@@ -3579,6 +3652,118 @@ function recordTravel(unit,distance,dt,turn=0) {
   while (movementDust.length>175 || game.time-movementDust[0].time>.66) movementDust.shift();
 }
 
+const MARCH_LIMIT=6;
+const TRAIL_STEP=.32;
+
+function resetMarchTrail(group,leader) {
+  group.leader=leader;
+  group.trail=[{x:leader.x,y:leader.y,distance:0}];
+  group.lastProgress=game.time;
+  group.finishedAt=null;
+  for (const unit of group.members) unit.marchCursor=0;
+}
+
+function formMarchGroup(leader,candidates) {
+  if (leader.marchGroup || isAirborne(leader) || !leader.route.length ||
+      distanceTo(leader,leader.goal)<3) return [];
+  const direction=Math.atan2(leader.goal.y-leader.y,leader.goal.x-leader.x);
+  const dx=Math.cos(direction),dy=Math.sin(direction);
+  const followers=candidates.filter(unit=>unit!==leader && unit.team===leader.team && unit.health>0 &&
+    !unit.marchGroup && !isAirborne(unit) && !unit.serviceDepot && !unit.embarked &&
+    distanceTo(unit,leader)<=5 && (unit.x-leader.x)*dx+(unit.y-leader.y)*dy<.55 &&
+    groundPathOpen(unit.x,unit.y,leader.x,leader.y))
+    .sort((a,b)=>distanceTo(a,leader)-distanceTo(b,leader)).slice(0,MARCH_LIMIT-1);
+  if (!followers.length) return followers;
+  const group={members:[leader,...followers],destination:leader.goal};
+  resetMarchTrail(group,leader);
+  leader.marchGroup=group;
+  for (const unit of followers) {
+    unit.marchGroup=group;
+    unit.goal={...group.destination};
+    unit.mode='moving';
+    unit.route=[];
+  }
+  return followers;
+}
+
+function endMarchGroup(group) {
+  for (const unit of group.members) {
+    if (unit.marchGroup!==group) continue;
+    unit.marchGroup=null;
+    if (unit!==group.leader) {
+      unit.route=[];
+      if (unit.goal) arrive(unit);
+    }
+  }
+}
+
+function followMarchTrail(unit,trail,gap) {
+  const limit=trail.at(-1).distance-gap;
+  let cursor=unit.marchCursor;
+  while (cursor<trail.length && trail[cursor].distance<=limit && distanceTo(unit,trail[cursor])<.14) cursor++;
+  // A short clear chord smooths the motion without crossing a blocked tile or skipping a corner.
+  let waypoint=null;
+  for (let index=cursor;index<Math.min(trail.length,cursor+6) && trail[index].distance<=limit;index++) {
+    const point=trail[index];
+    if (!groundPathOpen(unit.x,unit.y,point.x,point.y)) {
+      if (waypoint) break;
+      continue;
+    }
+    waypoint=point;
+    unit.marchCursor=index;
+  }
+  if (!waypoint) unit.marchCursor=cursor;
+  unit.route=waypoint?[{x:waypoint.x,y:waypoint.y}]:[];
+  return !waypoint && (cursor>=trail.length || trail[cursor].distance>limit);
+}
+
+function advanceMarchGroups() {
+  const groups=new Set();
+  for (const unit of units) if (unit.marchGroup) groups.add(unit.marchGroup);
+  for (const group of groups) {
+    const {leader,destination,trail}=group;
+    group.members=group.members.filter(unit=>unit.marchGroup===group && unit.health>0 &&
+      !unit.serviceDepot && !unit.embarked);
+    if (!group.members.includes(leader)) {
+      const replacement=group.members[0];
+      group.leader=replacement;
+      if (!replacement || !setCourse(destination,destination.kind,replacement)) {
+        group.leader=leader;
+        endMarchGroup(group);
+        continue;
+      }
+      replacement.marchGroup=group;
+      resetMarchTrail(group,replacement);
+      for (const member of group.members) if (member!==replacement) member.route=[];
+      continue;
+    }
+    if (group.members.length===1) {
+      endMarchGroup(group);
+      continue;
+    }
+    const finished=!leader.route.length;
+    const last=trail.at(-1);
+    const distance=distanceTo(last,leader);
+    if (distance>=TRAIL_STEP || (finished && distance>.001)) {
+      trail.push({x:leader.x,y:leader.y,distance:last.distance+distance});
+      group.lastProgress=game.time;
+    }
+    if (finished) group.finishedAt??=game.time;
+    else group.finishedAt=null;
+    group.speed=Math.min(...group.members.map(unit=>unit.speed))*.93;
+    let settled=finished;
+    let previous=leader,gap=0;
+    for (const unit of group.members) {
+      if (unit===leader) continue;
+      gap+=UNIT_RADIUS[previous.type]+UNIT_RADIUS[unit.type]+.32;
+      settled=followMarchTrail(unit,trail,gap) && settled;
+      previous=unit;
+    }
+    if (settled || (finished && game.time-group.finishedAt>7) ||
+        (!finished && game.time-group.lastProgress>10)) endMarchGroup(group);
+  }
+}
+
 function navigate(unit,dt) {
   if (unit.health<=0 || dt<=0) return;
   if (isAirborne(unit)) {
@@ -3591,6 +3776,8 @@ function navigate(unit,dt) {
   }
   const radius=VEHICLE_CONTACT_RADIUS[unit.type];
   const motion=motionFor(unit);
+  const group=unit.marchGroup;
+  const following=Boolean(group && group.leader!==unit);
   let target=unit.route[0];
   while (target && distanceTo(unit,target)<.00001) {
     unit.route.shift();
@@ -3599,7 +3786,7 @@ function navigate(unit,dt) {
   if (!target) {
     unit.velocity=0;
     recordTravel(unit,0,dt);
-    if (unit.goal) arrive(unit);
+    if (unit.goal && !following) arrive(unit);
     return;
   }
 
@@ -3610,7 +3797,7 @@ function navigate(unit,dt) {
   const steering=radius || dog ? Math.max(0,Math.cos(angle))**(dog?2:3) : 1;
   // Only the last few path points can affect the stopping distance at normal speeds.
   let stoppingDistance=Infinity;
-  if (unit.route.length<=7) {
+  if (!following && unit.route.length<=7) {
     stoppingDistance=distanceTo(unit,target);
     for (let i=1;i<unit.route.length;i++) stoppingDistance+=distanceTo(unit.route[i-1],unit.route[i]);
   }
@@ -3618,7 +3805,8 @@ function navigate(unit,dt) {
   const currentElevation=heightAt(unit.x,unit.y);
   const rise=currentElevation?Math.max(0,heightAt(target.x,target.y)-currentElevation):0;
   const grade=currentElevation?Math.max(.62,.96-rise*.027):1;
-  const targetSpeed=Math.min(unit.speed*steering*grade,brakeSpeed);
+  const speed=group?.leader===unit?(group.speed??unit.speed):unit.speed;
+  const targetSpeed=Math.min(speed*steering*grade,brakeSpeed);
   const oldSpeed=unit.velocity??0;
   unit.velocity=Math.max(oldSpeed-motion.braking*dt,Math.min(targetSpeed,oldSpeed+motion.acceleration*dt));
   // Pivot in place through very tight turns to avoid a sideways slide.
@@ -3634,6 +3822,10 @@ function navigate(unit,dt) {
     const step=distance>remaining?remaining/distance:1;
     const nextX=fromX+dx*step,nextY=fromY+dy*step;
     if (!groundPathOpen(fromX,fromY,nextX,nextY)) {
+      if (following) {
+        unit.velocity=0;
+        break;
+      }
       const goal=unit.goal;
       const path=goal && findPath(goal,unit);
       unit.route=path?smoothCourse(unit,path):[];
@@ -3648,7 +3840,7 @@ function navigate(unit,dt) {
     const blocker=blockingUnit(unit,fromX,fromY,nextX,nextY);
     if (blocker) {
       unit.velocity=0;
-      if (unit.goal && detourNodesLeft && game.time>=(unit.nextDetour??0)) {
+      if (!following && unit.goal && detourNodesLeft && game.time>=(unit.nextDetour??0)) {
         const stagger=((unit.id??0)%7)*.045;
         unit.nextDetour=game.time+.48+stagger;
         if (!clearMinerLane(unit,blocker,node) && !(unit.type==='miner' && blocker.team===unit.team && blocker.goal?.kind==='yield')) {
@@ -3674,7 +3866,7 @@ function navigate(unit,dt) {
   }
   if (traveled>0) unit.detourFailures=0;
   recordTravel(unit,traveled,dt,turn);
-  if (!unit.route.length) {
+  if (!unit.route.length && !following) {
     unit.velocity=0;
     if (unit.goal) arrive(unit);
   }
@@ -3895,6 +4087,7 @@ function beginConstruction(type,tile,team,except=null) {
   if (account.credits<cost || !canPlace(building,except)) return false;
   account.credits-=cost;
   structures.push(building);
+  pathStructureCount=-1;
   return building;
 }
 
@@ -4308,6 +4501,7 @@ function sendRelief(faction,army,contacts,raid) {
   }
   let issued=false;
   for (const unit of defenders) {
+    if (responders.has(unit)) continue;
     const distance=distanceTo(unit,raid.point);
     const knownAttacker=attackers.find(target=>canAttackTarget(unit,target) &&
       (unit.type!=='dog' || isPersonnel(target) || target.type==='dog') &&
@@ -4340,6 +4534,11 @@ function sendRelief(faction,army,contacts,raid) {
       used.add(tileKey(tile.x,tile.y));
       unit.rescueTarget=raid.target;
       responders.add(unit);
+      for (const follower of formMarchGroup(unit,defenders.filter(other=>!responders.has(other) &&
+        !other.attackTarget && distanceTo(other,raid.point)>7))) {
+        follower.rescueTarget=raid.target;
+        responders.add(follower);
+      }
       issued=true;
       break;
     }
@@ -4400,7 +4599,7 @@ function dispatchScouts(faction,army,point,kind='move') {
   return scout;
 }
 
-function marchUnit(unit,plan,claimed) {
+function marchUnit(unit,plan,claimed,army) {
   if (distanceTo(unit,plan.point)<2.6) return;
   if (unit.goal?.kind==='advance' && unit.advancePlan===plan) return;
   if (unit.advancePlan===plan && game.time<(unit.nextAdvanceAttempt??0)) return;
@@ -4422,6 +4621,11 @@ function marchUnit(unit,plan,claimed) {
   for (const site of sites) {
     if (!sendScout(unit,site,'advance')) continue;
     claimed.add(tileKey(site.x,site.y));
+    for (const follower of formMarchGroup(unit,army.filter(other=>!other.attackTarget &&
+      (!other.goal || ['stage','retreat','advance'].includes(other.goal.kind))))) {
+      follower.advancePlan=plan;
+      follower.nextAdvanceAttempt=game.time+2;
+    }
     break;
   }
 }
@@ -4527,8 +4731,10 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
       clearAttackOrder(unit);
       if (!advancing && unit.lastKnownTarget && sendScout(unit,unit.lastKnownTarget)) continue;
     }
-    if (advancing) marchUnit(unit,plan,claimed);
-    else if (!unit.goal) searchBattlefield(faction,unit,frontier);
+    if (advancing) marchUnit(unit,plan,claimed,attackers);
+    else if (!unit.goal && searchBattlefield(faction,unit,frontier)) {
+      formMarchGroup(unit,attackers.filter(other=>!other.goal && !other.attackTarget));
+    }
   }
 }
 
@@ -5230,6 +5436,7 @@ function orderAttack(members,target,automatic=false) {
       continue;
     }
     unit.attackTarget=target;
+    unit.marchGroup=null;
     unit.automaticAttack=automatic;
     unit.nextApproach=0;
     if (unit.type==='miner') unit.returnTo=null;
@@ -5244,6 +5451,7 @@ function orderAttack(members,target,automatic=false) {
 
 function clearAttackOrder(unit) {
   unit.attackTarget=null;
+  unit.marchGroup=null;
   unit.route=[];
   unit.goal=null;
   unit.mode='idle';
@@ -5252,6 +5460,7 @@ function clearAttackOrder(unit) {
 function advanceAttackOrders(fighters) {
   const approaches=new Map(Object.keys(FACTIONS).map(team=>[team,new Map()]));
   for (const unit of fighters) if (unit.goal?.kind==='attack' || unit.goal?.kind==='reinforce') {
+    if (unit.marchGroup && unit.marchGroup.leader!==unit) continue;
     const slots=approaches.get(unit.team);
     const key=tileKey(unit.goal.x,unit.goal.y);
     if (!slots.has(key)) slots.set(key,unit);
@@ -5269,11 +5478,13 @@ function advanceAttackOrders(fighters) {
     const weapon=WEAPONS[unit.type];
     const {range}=weapon;
     if (inWeaponRange(unit,target,weapon)) {
+      if (unit.marchGroup && unit.marchGroup.leader!==unit) unit.marchGroup=null;
       unit.route=[];
       unit.goal=null;
       unit.mode='idle';
       continue;
     }
+    if (unit.marchGroup) continue;
     if (unit.goal && approaches.get(unit.team).get(tileKey(unit.goal.x,unit.goal.y))===unit &&
         inWeaponRange(unit.goal,target,weapon) &&
         !unitPositionBlocked(unit,unit.goal.x,unit.goal.y,true)) continue;
@@ -5299,6 +5510,8 @@ function advanceAttackOrders(fighters) {
       const path=findPath(tile,unit);
       if (!path?.length || !setCourse(tile,'attack',unit,path)) return false;
       approaches.get(unit.team).set(tileKey(tile.x,tile.y),unit);
+      if (!unit.automaticAttack) formMarchGroup(unit,fighters.filter(other=>other.attackTarget===target &&
+        !other.automaticAttack && !other.goal && !inWeaponRange(other,target,WEAPONS[other.type])));
       return true;
     });
     if (!approached) {
@@ -5520,7 +5733,8 @@ function advanceCombat(dt=.04) {
       const witnesses=Object.values(FACTIONS).filter(faction=>canSeeEntity(faction,target)).map(faction=>faction.team);
       if (witnesses.length) {
         const big=target.width || target.crashed || Boolean(VEHICLE_CONTACT_RADIUS[target.type]);
-        wrecks.push({x,y,time:game.time,big,building:target.width?target:null,witnesses});
+        const building=target.width?{x:target.x,y:target.y,width:target.width,height:target.height}:null;
+        wrecks.push({x,y,time:game.time,big,building,witnesses});
         if (big) playAt('explosion',{x,y},target);
         for (const team of witnesses) {
           const faction=FACTIONS[team];
@@ -5538,7 +5752,10 @@ function advanceCombat(dt=.04) {
       if (target===game.selectedBuilding) select([]);
     }
   }
-  if (buildingsDestroyed) refreshPowerGrids();
+  if (buildingsDestroyed) {
+    pathStructureCount=-1;
+    refreshPowerGrids();
+  }
   for (const [faction,previous] of priorPower) {
     if (faction.power.rate<previous) {
       log(factionName(faction.team)+'电厂被毁，供电降至 '+Math.round(faction.power.rate*100)+'%。',faction.team);
@@ -5576,6 +5793,11 @@ function drawHealth(point,entity,max,width) {
 
 function drawUnitStatus(unit) {
   const point=project(unit.x,unit.y,UNIT_ART[unit.type].hitHeight+7+unitElevation(unit));
+  if (unit.marchLeader) {
+    const x=point.x+8,y=point.y-13,paint=TEAM_PAINT[unit.team];
+    stroke(ctx,x,y,x,y+11,paint.light,1.1);
+    shape(ctx,[[x,y],[x+7,y+1],[x+5,y+5],[x,y+4]],paint.light,paint.dark,.8);
+  }
   const hp=unit.type==='mcv'?MCV_HEALTH:WEAPONS[unit.type]?.health??PRODUCTS[unit.type]?.health;
   if (game.hoverTarget===unit || game.selection.some(member=>member.attackTarget===unit)) {
     const ground=project(unit.x,unit.y,unitElevation(unit));
@@ -5878,7 +6100,8 @@ function syncHud() {
   const building=game.selectedBuilding;
   const count=game.selection.length;
   const rank=unit?.rank?' · '+unit.rank+' 级':'';
-  byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label+rank : count ? '已选 '+count+' 个单位' :
+  const group=unit?.marchSize?' · '+(unit.marchLeader?'领队':'队员')+' '+unit.marchSize+' 个单位':'';
+  byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label+rank+group : count ? '已选 '+count+' 个单位' :
     building ? buildingSpec(building.type).label : '未选择单位';
   unitMenu.hidden=!count;
   syncUnitStats(unit);
@@ -6282,6 +6505,7 @@ function stepSimulation(dt) {
     game.time+=dt;
     detourNodesLeft=DETOUR_NODES_PER_TICK;
     try {
+      advanceMarchGroups();
       for (const unit of [...units]) {
         if (unit.type==='miner') advanceMiner(unit,dt);
         else navigate(unit,dt);
