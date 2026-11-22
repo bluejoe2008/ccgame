@@ -17,6 +17,7 @@ const U = TILE_W / 2;
 const V = TILE_H / 2;
 const CARGO_LIMIT = 100;
 const SCENT_RANGE=8.4;
+const DOG_SCALE=.5;
 const MOUNTED_SPEED=5.0;
 const JET_ALTITUDE=102;
 const AIRCRAFT_TYPES=new Set(['fighter','bomber','reconPlane','helicopter']);
@@ -106,7 +107,7 @@ const WEAPONS={
   tank:{health:150,defense:.18,range:4.45,damage:32,reload:1.22,height:28},
   miner:{health:170,defense:.12,range:3.2,damage:9,reload:.60,height:49},
   soldier:{health:58,defense:.06,range:3.4,damage:10,reload:.66,height:23},
-  dog:{health:64,defense:0,range:1.50,damage:21,reload:.72,height:14,pursuit:6.35},
+  dog:{health:64,defense:0,range:1.50,damage:21,reload:.72,height:14*DOG_SCALE,pursuit:6.35},
   rocketeer:{health:64,defense:.03,range:4.8,damage:34,reload:1.9,height:31,effect:'rocket',armorFactor:1.4,softFactor:.45},
   mortar:{health:55,defense:.02,range:5.8,minimum:1.5,damage:24,reload:2.5,height:27,effect:'mortar',splash:1.15},
   pulseTank:{health:255,defense:.28,range:6.4,damage:62,reload:1.75,height:38,effect:'pulse',armorFactor:1.35},
@@ -144,17 +145,17 @@ const BUILDINGS = {
 const PRODUCTS = {
   miner:{label:'采矿车',cost:250,time:4.1,speed:3.25,vision:5.4,building:'factory',icon:'◆'},
   tank:{label:'坦克',cost:350,time:3.2,speed:2.9,vision:5.3,building:'factory',icon:'▰'},
-  soldier:{label:'步兵',cost:120,time:1.7,speed:2.5,vision:5.5,building:'barracks',icon:'◆'},
-  dog:{label:'军犬',cost:150,time:2.8,speed:5.25,vision:5.6,building:'barracks',icon:'◇'},
-  engineer:{label:'工程师',cost:180,time:3.1,speed:2.55,vision:5.1,health:48,building:'barracks',icon:'▥'},
-  rocketeer:{label:'火箭筒兵',cost:220,time:3.4,speed:2.35,vision:5.5,building:'barracks',icon:'➶'},
-  mortar:{label:'迫击炮兵',cost:280,time:4.6,speed:2.05,vision:6.1,building:'barracks',icon:'↗'},
+  soldier:{label:'步兵',cost:120,time:1.7,speed:1.25,vision:5.5,building:'barracks',icon:'◆'},
+  dog:{label:'军犬',cost:150,time:2.8,speed:2.625,vision:5.6,building:'barracks',icon:'◇'},
+  engineer:{label:'工程师',cost:180,time:3.1,speed:1.275,vision:5.1,health:48,building:'barracks',icon:'▥'},
+  rocketeer:{label:'火箭筒兵',cost:220,time:3.4,speed:1.175,vision:5.5,building:'barracks',icon:'➶'},
+  mortar:{label:'迫击炮兵',cost:280,time:4.6,speed:1.025,vision:6.1,building:'barracks',icon:'↗'},
   pulseTank:{label:'脉冲炮车',cost:780,time:8,speed:2.6,vision:6.5,building:'factory',tech:'pulse'},
   siegeTank:{label:'震波攻城车',cost:760,time:8.5,speed:2.4,vision:7,building:'factory',tech:'shock'},
   artillery:{label:'自行火炮',cost:590,time:6.2,speed:2.35,vision:7.2,building:'factory'},
   mcv:{label:'基地车',cost:2200,time:15,speed:2.55,vision:5.8,health:MCV_HEALTH,building:'factory'},
   horse:{label:'战马',cost:160,time:3.3,speed:4.6,vision:4.8,health:85,building:'barracks'},
-  cavalry:{label:'骑兵',cost:240,time:3.9,speed:2.55,vision:5.5,building:'barracks'},
+  cavalry:{label:'骑兵',cost:240,time:3.9,speed:1.275,vision:5.5,building:'barracks'},
   fighter:{label:'战斗机',cost:850,time:8.2,speed:8.1,vision:8.5,building:'airport'},
   bomber:{label:'轰炸机',cost:1100,time:10.6,speed:6.8,vision:7.8,building:'airport'},
   reconPlane:{label:'侦察机',cost:520,time:5.2,speed:10.2,vision:12,health:80,building:'airport'},
@@ -175,7 +176,7 @@ const UNIT_ART = {
   mcv:{bracket:54,hitWidth:59,hitHeight:68},
   tank:{bracket:42,hitWidth:50,hitHeight:41},
   soldier:{bracket:14,hitWidth:12,hitHeight:39,small:true},
-  dog:{bracket:24,hitWidth:26,hitHeight:28,small:true},
+  dog:{bracket:24*DOG_SCALE,hitWidth:26*DOG_SCALE,hitHeight:28*DOG_SCALE,small:true},
   engineer:{bracket:15,hitWidth:13,hitHeight:39,small:true},
   rocketeer:{bracket:15,hitWidth:17,hitHeight:42,small:true},
   mortar:{bracket:15,hitWidth:16,hitHeight:40,small:true},
@@ -196,7 +197,7 @@ const HEAVY_MOTION = {acceleration:4.5, braking:8, turnRate:4.5};
 const TRACKED_MOTION = {acceleration:6.5, braking:10, turnRate:7};
 const DOG_MOTION={acceleration:22,braking:25,turnRate:19};
 const FOOT_MOTION = {acceleration:14, braking:17, turnRate:15};
-const UNIT_RADIUS = {mcv:.46,miner:.43,tank:.42,soldier:.20,dog:.23,engineer:.20,rocketeer:.20,mortar:.20,pulseTank:.45,siegeTank:.45,artillery:.46,horse:.33,cavalry:.20,mountedCavalry:.36,fighter:.40,
+const UNIT_RADIUS = {mcv:.46,miner:.43,tank:.42,soldier:.20,dog:.23*DOG_SCALE,engineer:.20,rocketeer:.20,mortar:.20,pulseTank:.45,siegeTank:.45,artillery:.46,horse:.33,cavalry:.20,mountedCavalry:.36,fighter:.40,
   bomber:.50,reconPlane:.34,helicopter:.44};
 const AIR_TARGETING=new Set(['fighter','soldier','rocketeer','cavalry','mountedCavalry','sentry','bunker','laser']);
 const TEAM_PAINT = {
@@ -903,7 +904,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=reconnaissance');
+      const worker=new Worker('terrain-worker.js?v=unit-movement');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -1679,7 +1680,7 @@ function drawDog(context,origin,heading,paint,phase,idlePhase=null,enemyDog=fals
   const outline='#343633';
   context.save();
   context.translate(origin.x,origin.y);
-  context.scale(facing,1);
+  context.scale(facing*DOG_SCALE,DOG_SCALE);
   shadow(context,1,2,22,6,.39);
   for (const [x,offset,color] of [[-11,-step,shade],[10,step,shade],[-15,step,coat],[6,-step,coat]]) {
     shape(context,[[x,-13],[x+4,-14],[x+3+offset*.4,-6],
@@ -1862,7 +1863,7 @@ function drawGait(context,image,width,height,unit,facing,forward,mirror,equine,i
   const running=dog?dogRunMix(stride):1;
   const strideLength=equine?1.46:dog?mix(.64,1.34,running):.82;
   const stance=equine?.34:dog?mix(.52,.30,running):.43;
-  const phase=dog?(unit.gaitCycles??(unit.travel??0)/1.34):(unit.travel??0)/strideLength;
+  const phase=dog?(unit.gaitCycles??(unit.travel??0)/(1.34*DOG_SCALE)):(unit.travel??0)/strideLength;
   const strength=dog?smooth(Math.min(1,stride*2.0)):smooth(Math.min(1,stride*3.5));
   const resting=idlePhase===null?0:1-smooth(Math.min(1,stride*4));
   const breath=idlePhase===null?0:Math.sin(idlePhase*.62)*.56*resting;
@@ -2014,7 +2015,7 @@ function renderUnit(context,unit,origin) {
   const equine=unit.type==='horse' || unit.type==='mountedCavalry';
   const quadruped=dog || equine;
   const travel=unit.travel??0;
-  const phase=travel*Math.PI*2/(equine?1.31:dog?1.01:.69);
+  const phase=travel*Math.PI*2/(equine?1.31:dog?1.01*DOG_SCALE:.69);
   const strength=reducedMotion.matches?0:(unit.stride??0);
   const idlePhase=reducedMotion.matches?null:lastFrame*.00375+(unit.id??0)*1.37;
   if (idlePhase!==null && wheeled && strength<.16) drawIdleExhaust(context,unit,origin,idlePhase);
@@ -2032,11 +2033,12 @@ function renderUnit(context,unit,origin) {
     const width=height*image.naturalWidth/image.naturalHeight;
     const bodyBob=wheeled?Math.sin(travel*14)*.48*strength:0;
     context.save();
-    context.translate(origin.x,origin.y+offset+bodyBob);
+    const scale=dog?DOG_SCALE:1;
+    context.translate(origin.x,origin.y+offset*scale+bodyBob);
     if (wheeled && !reducedMotion.matches && strength>.025) {
       context.rotate((unit.lean??0)*(facing===3 ? .5 : 1));
     }
-    if (mirror) context.scale(-1,1);
+    if (mirror || dog) context.scale(mirror?-scale:scale,scale);
     if (isAirborne(unit)) {
       context.drawImage(image,-width/2,-height*.75,width,height);
     } else if (!wheeled && idlePhase!==null && (quadruped || strength>.025)) {
@@ -2642,7 +2644,8 @@ function drawWorld() {
     const art=UNIT_ART[unit.type];
     const vehicle=Boolean(VEHICLE_CONTACT_RADIUS[unit.type]);
     const extent=Math.max(art.hitWidth,art.bracket)+7;
-    castShadow(ctx,ground,air?41:vehicle?44:23,air?9:vehicle?11:4,air?.26:.43);
+    const shadowScale=unit.type==='dog'?DOG_SCALE:1;
+    castShadow(ctx,ground,(air?41:vehicle?44:23)*shadowScale,(air?9:vehicle?11:4)*shadowScale,air?.26:.43);
     return {air,depth:unit.x+unit.y+.12,left:position.x-extent,right:position.x+extent,
       top:position.y-art.hitHeight-22,bottom:position.y+(vehicle?34:10),draw:()=>{
         if (game.selection.includes(unit)) outlines(ctx,position,unit.type);
@@ -3622,8 +3625,8 @@ function recordTravel(unit,distance,dt,turn=0) {
   const blend=1-Math.exp(-dt*14);
   unit.stride=mix(unit.stride??0,movement,blend);
   if (unit.type==='dog' && distance>0) {
-    const length=mix(.64,1.34,dogRunMix(unit.stride));
-    unit.gaitCycles=(unit.gaitCycles??previousTravel/1.34)+distance/length;
+    const length=mix(.64,1.34,dogRunMix(unit.stride))*DOG_SCALE;
+    unit.gaitCycles=(unit.gaitCycles??previousTravel/(1.34*DOG_SCALE))+distance/length;
   }
   const lean=dt ? Math.max(-.046,Math.min(.046,turn/dt*.013))*movement : 0;
   unit.lean=mix(unit.lean??0,lean,blend);

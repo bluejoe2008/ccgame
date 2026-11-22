@@ -25,6 +25,12 @@ const interfaceScript = new vm.Script(`({
   restore(saved) {
     for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
     units.splice(0, units.length, ...saved.units);
+    for (const unit of [...units,...units.flatMap(carrier=>carrier.passengers??[])]) {
+      const speed=PRODUCTS[unit.type]?.speed;
+      if (speed===undefined || unit.speed===speed) continue;
+      unit.speed=speed;
+      if (unit.velocity>speed) unit.velocity=speed;
+    }
     structures.splice(0, structures.length, ...saved.structures);
     searchSites.splice(0, searchSites.length, ...saved.searchSites);
     groundImpacts.push(...(saved.groundImpacts??[]));

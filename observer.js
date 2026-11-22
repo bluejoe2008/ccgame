@@ -238,7 +238,7 @@ function updateObserverEntities(records, registry, destination, receivedAt) {
     const last = samples.at(-1);
     const pose = {
       x:record.x, y:record.y, travel:record.travel ?? 0, stride:record.stride ?? 0,
-      gaitCycles:record.gaitCycles ?? (record.type==='dog' ? (record.travel ?? 0)/1.34 : 0),
+      gaitCycles:record.gaitCycles ?? (record.type==='dog' ? (record.travel ?? 0)/(1.34*DOG_SCALE) : 0),
       lean:record.lean ?? 0, altitude:record.altitude ?? 0, heading:record.heading,
       turretHeading:record.turretHeading ?? record.heading,
     };
@@ -433,7 +433,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=reconnaissance';
+  script.src = 'game.js?v=unit-movement';
   document.head.append(script);
 }
 bootObserver();
