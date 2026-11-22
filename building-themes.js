@@ -47,6 +47,34 @@ const BUILDING_THEMES={
     stacks:{diesel:[[.253,.054],[.355,.024]],refinery:[[.139,.114],[.225,.154]]},
     rotors:{oil:[.42,.42],diesel:[.633,.649]},
   },
+  tang:{
+    label:'唐代建筑', prefix:'tang-',
+    widths:{sentry:78,bunker:143,wall:59,laser:96,solar:144,recreation:144},
+    laser:{aspect:360/229,emitter:[.414,.31]},
+    lights:{
+      yard:[[.37,.65],[.45,.65]], factory:[[.38,.63],[.51,.64]], repairDepot:[[.43,.59],[.57,.65]],
+      refinery:[[.07,.66],[.49,.50]], barracks:[[.40,.77],[.51,.77]],
+      airport:[[.09,.82],[.20,.67],[.30,.52],[.68,.89],[.76,.72],[.85,.56]],
+      solar:[[.51,.79]], diesel:[[.09,.79],[.27,.82]], oil:[[.53,.47]], sentry:[[.51,.36]],
+      turret:[[.48,.31]], bunker:[[.42,.58]], recreation:[[.43,.56],[.62,.56]], training:[[.43,.66]],
+    },
+    stacks:{refinery:[[.132,.055],[.204,.024]],diesel:[[.193,.024],[.326,.04]]},
+    rotors:{oil:[.63,.62],diesel:[.74,.70],solar:[.233,.305]},
+  },
+  qing:{
+    label:'清代建筑', prefix:'qing-',
+    widths:{sentry:71,bunker:143,wall:59,laser:82,solar:145,recreation:140},
+    laser:{aspect:360/180,emitter:[.43,.30]},
+    lights:{
+      yard:[[.35,.61],[.51,.60]], factory:[[.40,.58],[.54,.61]], repairDepot:[[.43,.58],[.54,.70]],
+      refinery:[[.16,.70],[.30,.68]], barracks:[[.34,.73],[.43,.74]],
+      airport:[[.14,.81],[.25,.64],[.36,.56],[.69,.85],[.76,.73],[.83,.59]],
+      solar:[[.48,.71]], diesel:[[.30,.76],[.44,.76]], oil:[[.73,.48]], sentry:[[.45,.355]],
+      turret:[[.46,.35]], bunker:[[.40,.57]], recreation:[[.43,.59],[.61,.59]], training:[[.31,.71]],
+    },
+    stacks:{refinery:[[.145,.040],[.233,.021]],diesel:[[.383,.024],[.548,.06]]},
+    rotors:{oil:[.675,.61],diesel:[.78,.67],solar:[.244,.264]},
+  },
 };
 
 function hasBuildingTheme(theme) {
