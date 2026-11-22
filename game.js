@@ -2107,11 +2107,96 @@ function structureArt(building) {
   return {image,left:center.x-width/2,width,height,bottom,top:bottom-height,progress};
 }
 
+// Operating effects sit on features shared by the two painted faction variants.
+const buildingLights={
+  yard:[[.455,.522],[.642,.459],[.689,.451]],
+  factory:[[.59,.548],[.77,.434]],
+  refinery:[[.453,.461]],
+  barracks:[[.567,.028],[.176,.621],[.449,.733]],
+  airport:[[.246,.149],[.352,.915],[.489,.856],[.636,.790],[.787,.717],[.890,.651]],
+  solar:[[.790,.278],[.819,.292]],
+  diesel:[[.152,.348],[.286,.427],[.432,.502]],
+  oil:[[.733,.749]],
+  sentry:[[.227,.510]],
+  turret:[[.500,.121]],
+  bunker:[[.179,.477],[.491,.595]],
+  laser:[[.292,.238]],
+  recreation:[[.256,.503],[.410,.574]],
+  training:[[.859,.369]],
+};
+const buildingEffectSprites=new Map();
+
+function drawBuildingGlow(context,color,x,y,rx,ry,intensity) {
+  if (!buildingEffectSprites.has(color)) {
+    const image=document.createElement('canvas');
+    image.width=image.height=32;
+    const brush=image.getContext('2d');
+    const glow=brush.createRadialGradient(16,16,0,16,16,16);
+    glow.addColorStop(0,color);
+    glow.addColorStop(.32,color+'9e');
+    glow.addColorStop(1,color+'00');
+    brush.fillStyle=glow;
+    brush.fillRect(0,0,32,32);
+    buildingEffectSprites.set(color,image);
+  }
+  const opacity=context.globalAlpha;
+  context.globalAlpha=opacity*intensity;
+  context.drawImage(buildingEffectSprites.get(color),x-rx,y-ry,2*rx,2*ry);
+  context.globalAlpha=opacity;
+}
+
+function drawBuildingActivity(context,building,art) {
+  const {type,team}=building;
+  const lights=buildingLights[type];
+  if (!lights || team==='neutral' || building.health<=0 || building.remaining>0 ||
+      reducedMotion.matches || observedMatch?.status!=='running') return;
+  const rate=team===game.perspective?viewFaction().power.rate:1;
+  const active=team===game.perspective && building.queue?.[0]?.remaining>0;
+  const time=lastFrame*.001+hash(building.x,building.y,97)*5;
+  const phase=time*(active?4:1.7)*(.55+.45*rate);
+  const signal=type==='laser' || type==='solar' || type==='barracks';
+  const color=signal?(team==='enemy'?'#ff794b':'#8ad8ff'):'#ffca7e';
+  for (const [i,[x,y]] of lights.entries()) {
+    const wave=.5+.5*Math.cos(phase-i*(type==='airport'?1.45:1.9));
+    const strength=(active?.30+.55*wave:.20+.34*wave)*(.42+.58*rate);
+    const radius=type==='laser'?6:type==='airport'?4:4.8;
+    drawBuildingGlow(context,color,art.left+x*art.width,art.top+y*art.height,radius,radius*.8,strength);
+  }
+
+  if (type==='oil' || type==='diesel') {
+    const oil=type==='oil';
+    const x=art.left+art.width*(oil?.567:.269);
+    const y=art.top+art.height*(oil?.593:.536);
+    const radius=oil?5:4;
+    context.beginPath();
+    for (let i=0;i<3;i++) {
+      const angle=time*(oil?4:7)+i*Math.PI*2/3;
+      context.moveTo(x,y);
+      context.lineTo(x+Math.cos(angle)*radius*(oil?1:.56),y+Math.sin(angle)*radius*(oil?.76:1.55));
+    }
+    context.strokeStyle=oil?'#d2a46794':'#bec2ac6e';
+    context.lineWidth=1.15;
+    context.stroke();
+  }
+
+  if ((type==='diesel' || type==='refinery') && building.health>buildingSpec(type).health*.70) {
+    const diesel=type==='diesel';
+    const stack=diesel?[.227,.035]:[.347,.029];
+    const x=art.left+art.width*stack[0],y=art.top+art.height*stack[1];
+    for (let i=0;i<3;i++) {
+      const age=(time*(diesel?.72:.54)+i/3)%1;
+      const opacity=Math.sin(age*Math.PI)*.23*(diesel?1:rate);
+      drawBuildingGlow(context,'#d1cbb6',x+age*9,y-age*23,3+age*7,2.8+age*5,opacity);
+    }
+  }
+}
+
 function drawStructure(context,structure,art) {
   const {image,left,top,bottom,width:drawWidth,height:drawHeight,progress}=art;
   if (image?.naturalWidth) {
     if (progress>=1) {
       context.drawImage(image,left,top,drawWidth,drawHeight);
+      drawBuildingActivity(context,structure,art);
       return;
     }
     const fill=Math.max(0,(progress-.18)/.82);

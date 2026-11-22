@@ -237,7 +237,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=terrain-seams';
+  script.src = 'game.js?v=building-activity';
   document.head.append(script);
 }
 bootObserver();
