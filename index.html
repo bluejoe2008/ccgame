@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Command&amp;Conquer</title>
+  <link rel="stylesheet" href="style.css?v=shared-match">
+  <script src="audio.js?v=laser-mix" defer></script>
+  <script src="commander.js?v=shared-match" defer></script>
+  <script src="observer.js?v=shared-match" defer></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="brand">
+      <div class="insignia" aria-hidden="true"><i></i><i></i><i></i></div>
+      <h1>Command&amp;Conquer</h1>
+    </div>
+    <dl class="metrics" aria-label="战术统计">
+      <div class="metric cash"><span class="ore-icon" aria-hidden="true"></span><div><dt>蓝方储备</dt><dd id="credits">0</dd></div></div>
+      <div class="metric red-cash" hidden><span class="ore-icon" aria-hidden="true"></span><div><dt>红方储备</dt><dd id="red-credits">0</dd></div></div>
+      <div class="metric power-metric" title="供电不足会降低生产和建筑运转效率">
+        <dt id="power-label">供电 / 负载</dt><dd id="power">0 / 0</dd>
+      </div>
+      <div class="metric force-count blue-count" aria-label="蓝方单位统计">
+        <div><dt id="blue-buildings-label">蓝方建筑</dt><dd id="blue-buildings">0</dd></div>
+        <div><dt id="blue-units-label">活动单位</dt><dd id="blue-units">0</dd></div>
+      </div>
+      <div class="metric force-count red-count" aria-label="红方单位统计">
+        <div><dt id="red-buildings-label">红方可见建筑</dt><dd id="red-buildings">0</dd></div>
+        <div><dt id="red-units-label">可见单位</dt><dd id="red-units">0</dd></div>
+      </div>
+    </dl>
+    <div class="header-actions">
+      <button id="sound-toggle" class="metal-button" type="button" aria-label="静音" aria-pressed="false" title="静音"><span class="sound-icon" aria-hidden="true">♪</span> <span class="header-label">音效</span></button>
+      <button id="help-button" class="metal-button" type="button" aria-label="操作说明"><span aria-hidden="true">?</span> <span class="header-label">操作说明</span></button>
+      <button id="fullscreen" class="metal-button" type="button" aria-label="全屏"><span aria-hidden="true">⛶</span> <span class="header-label">全屏</span></button>
+    </div>
+  </header>
+
+  <main class="command-layout">
+    <section class="battlefield" aria-labelledby="map-heading">
+      <div class="map-top">
+        <div class="map-label">
+          <i aria-hidden="true"></i><h2 id="map-heading">共享对局</h2>
+          <button id="start-session" class="metal-button session-button" type="button" disabled>开始</button>
+          <button id="end-session" class="metal-button session-button" type="button" disabled>结束</button>
+          <span id="match-clock" class="match-clock" aria-label="对局进度">连接中</span>
+        </div>
+        <div class="map-top-actions">
+          <details class="log-block tech-block">
+            <summary>科技与指挥</summary>
+            <div class="tech-panel" id="tech-panel">
+              <section><h3>蓝方</h3><p id="blue-research"></p><ul id="blue-tech"></ul></section>
+              <section><h3>红方</h3><p id="red-research"></p><ul id="red-tech"></ul></section>
+            </div>
+          </details>
+          <details class="log-block">
+            <summary>行动记录</summary>
+            <ol id="log" aria-label="行动记录"></ol>
+          </details>
+          <div class="map-coords" id="coords" aria-label="坐标">X 00 / Y 00</div>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <canvas id="map" aria-label="矿区战术地图，点击单位自动跟踪，拖动地图，按住 Shift 拖动框选" tabindex="0"></canvas>
+        <div class="radar-frame"><canvas id="radar" aria-label="小地图，点击移动视野"></canvas><div class="radar-glass" aria-hidden="true"></div></div>
+        <section id="unit-menu" class="map-menu unit-menu" aria-label="所选单位状态" hidden>
+          <div class="unit-status"><strong id="active-unit">未选择单位</strong><span><i class="dot green"></i> <span id="unit-mode"></span></span></div>
+          <dl id="unit-stats" class="unit-stats" aria-label="单位属性" hidden>
+            <div><dt>生命值</dt><dd id="unit-health"></dd></div>
+            <div title="基础单次伤害，实际伤害受武器克制和目标防御影响"><dt>攻击力</dt><dd id="unit-attack"></dd></div>
+            <div title="受到武器攻击时减少的伤害比例"><dt>防御减伤</dt><dd id="unit-defense"></dd></div>
+            <div title="基础移动速度，地形会影响实际移速"><dt>移速</dt><dd id="unit-speed"></dd></div>
+            <div><dt>造价</dt><dd id="unit-cost"></dd></div>
+            <div title="基础生产时间，实际耗时受供电和工厂数量影响"><dt>生产工时</dt><dd id="unit-time"></dd></div>
+            <div class="unit-range"><dt>反击射程</dt><dd id="unit-range"></dd></div>
+          </dl>
+          <div class="cargo" id="cargo-panel">
+            <div><label for="cargo-bar">矿仓载量</label><strong id="cargo-count">0 / 100</strong></div>
+            <progress id="cargo-bar" max="100" value="0">0</progress>
+          </div>
+        </section>
+        <section id="building-menu" class="map-menu building-menu" aria-labelledby="building-name" hidden>
+          <header><h3 id="building-name"></h3><button class="metal-button" id="close-building" type="button" aria-label="取消选择">×</button></header>
+          <p id="production-status" class="production-status"></p>
+          <progress id="production-bar" class="production-bar" max="100" value="0" aria-label="当前施工或生产进度" hidden></progress>
+          <div class="repair-panel" id="repair-panel">
+            <strong id="repair-status"></strong>
+            <progress id="repair-bar" class="production-bar" max="100" value="0" aria-label="建筑耐久"></progress>
+          </div>
+        </section>
+        <div class="map-hud">
+          <div class="intel">
+            <span class="intel-pulse" aria-hidden="true"></span>
+            <span id="instruction">点击查看单位或建筑</span>
+          </div>
+          <div class="map-buttons" aria-label="地图视图">
+            <button id="view-blue" class="metal-button faction-view" type="button" title="切换到蓝方视角" aria-label="蓝方视角" aria-pressed="true">蓝方</button>
+            <button id="view-red" class="metal-button faction-view" type="button" title="切换到红方视角" aria-label="红方视角" aria-pressed="false">红方</button>
+            <button id="focus" class="metal-button focus-button" type="button" title="定位所选（F）" aria-label="定位所选"><span aria-hidden="true">⊙</span> <span id="focus-label">定位所选</span></button>
+          </div>
+        </div>
+      </div>
+      <div class="map-footer">
+        <span><i class="dot friendly"></i> 蓝方单位</span>
+        <span><i class="dot rich-ore"></i> 富矿</span>
+        <span><i class="dot poor-ore"></i> 贫矿</span>
+        <span><i class="dot oil"></i> 油田</span>
+        <span><i class="dot blue"></i> 建筑</span>
+        <span><i class="dot red"></i> 红方单位</span>
+        <span class="footer-hint">拖动地图 · Shift 拖动框选</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="match-result" aria-labelledby="match-title" aria-describedby="match-summary">
+    <header><h2 id="match-title"></h2></header>
+    <p id="match-summary"></p>
+    <footer><button class="metal-button" id="continue-match" type="button">继续观战</button><button class="metal-button" id="restart-match" type="button">再看一局</button></footer>
+  </dialog>
+
+  <dialog id="help" aria-labelledby="help-heading">
+    <form method="dialog">
+      <header><h2 id="help-heading">操作说明</h2><button type="submit" class="metal-button">关闭</button></header>
+      <dl>
+        <div><dt>共享对局</dt><dd>「开始」在服务器开启一场比赛。「结束」停止模拟并保留最后的战况。刷新页面会回到当前对局。蓝红双方由电脑控制。选中活动单位后，镜头自动跟踪，可用「跟踪」按钮或 F 暂停及恢复。</dd></div>
+        <div><dt>视野</dt><dd>拖动地图、按方向键或操作小地图可停止跟踪并移动视野。点击「蓝方」或「红方」切换阵营视角。未探索区域被迷雾遮住，离开视野的已探索地形会变暗。地图中的山丘会使地面单位上坡减速。</dd></div>
+        <div><dt>建造和收入</dt><dd>电脑自动部署基地车，在建造场附近施工。双方基地附近是贫矿，中央富矿储量更大、开采更快。两类矿的再生储量都有限，近矿耗尽后，矿车会寻找已探明的远矿。满供电的油田每 15 秒提供 280 储备，首次占领奖励 260。建造、生产和修理消耗储备和时间，资金不足时会暂停维修。</dd></div>
+        <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>
+        <div><dt>科技</dt><dd>双方可投入储备研发未知的攻击或经济科技。成果公开后可再花费资金制造超级武器或增收设备。点击「科技」查看进度。</dd></div>
+        <div><dt>电力与生产</dt><dd>多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。电厂被摧毁后，供电不足会拖慢兵工厂和兵营的生产。</dd></div>
+        <div><dt>空军</dt><dd>机场受供电影响并生产战斗机。战斗机可飞越水域及建筑，侦察、空战和攻击地面目标。火箭筒兵、机枪工事和激光塔能还击空中目标。</dd></div>
+        <div><dt>休闲与训练</dt><dd>棋牌室提高活动单位射速，训练操场提高活动单位伤害。供电不足会减弱加成。</dd></div>
+        <div><dt>指挥智能体</dt><dd>双方会在形成首批战斗部队后向已侦察的前沿推进，发现目标后主动交战。主力出击时会留下守军，基地遇袭会召回援军。点击「科技与指挥」查看当前阵营的计划。</dd></div>
+        <div><dt>胜负</dt><dd>一方失去全部建筑和活动单位时，该方失败。双方同时失去全部单位时为平局。</dd></div>
+      </dl>
+    </form>
+  </dialog>
+</body>
+</html>
