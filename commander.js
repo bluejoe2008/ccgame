@@ -13,7 +13,6 @@ const COMMAND_TASKS={
   intercept:{label:'集中拦截',mode:'assault',duration:31},
   strike:{label:'进攻敌方建筑',mode:'assault',duration:46},
   fortify:{label:'加强基地防御',mode:'guard',duration:32},
-  research:{label:'推进科技研发',mode:'develop',duration:38},
 };
 const COMMAND_RESULTS={complete:'已完成',stalled:'受阻',lost:'目标失去联系',interrupted:'因战况中断'};
 const CAMPAIGN_TASKS=new Set(['advance','strike','harass','intercept']);
@@ -193,10 +192,6 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     add('fortify',underPressure?105:faction.strategy==='conservative' && defenses<2?64:45,
       null,'defense',null,defenses+1);
   }
-  if (yards && power>=82 && army.length>=3 && faction.credits>=750 &&
-      faction.discoveries.size<Object.keys(RESEARCH_PROGRAMS).length) {
-    add('research',faction.credits>=1400 && army.length>=6?78:58,null,'research',null,faction.discoveries.size+1);
-  }
 
   const scouts=members.filter(unit=>!unit.attackTarget &&
     (unit.type==='reconPlane' || unit.type!=='bomber' && isArmyType(unit.type)));
@@ -334,7 +329,6 @@ function evaluateCommand(faction,plan,battle) {
       task==='airpower' && battle.aircraft>0 ||
       task==='mobilize' && battle.army.length>=goal ||
       task==='fortify' && battle.defenses>=goal ||
-      task==='research' && faction.discoveries.size>=goal ||
       task==='capture' && battle.buildings.includes(target) ||
       task==='recon' && battle.members.includes(plan.scout) && distanceTo(plan.scout,plan.point)<=2.1 ||
       task==='advance' && plan.marchers?.length && plan.marchers.filter(unit=>

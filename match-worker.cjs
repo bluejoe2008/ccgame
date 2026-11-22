@@ -23,7 +23,24 @@ const interfaceScript = new vm.Script(`({
   executePlayerOrder,
   nextId() { return nextUnitId; },
   restore(saved) {
-    for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
+    for (const name of ['player','enemy']) {
+      const faction=FACTIONS[name]=saved.factions[name];
+      const {commander}=faction;
+      delete faction.research;
+      delete faction.manufacturing;
+      delete faction.discoveries;
+      delete faction.equipment;
+      if (commander.plan?.task==='research') commander.plan=null;
+      else if (commander.plan?.followup?.task==='research') commander.plan.followup=null;
+      if (commander.proposal?.primary?.task==='research' || commander.proposal?.followup?.task==='research') {
+        commander.proposal=null;
+      }
+      if (faction.orders?.task==='research') {
+        faction.orders={mode:'develop',task:'mobilize',target:null,source:'local'};
+        commander.nextReview=0;
+      }
+      if (faction.experience?.focus) faction.experience.focus=faction.experience.focus.filter(task=>task!=='research');
+    }
     units.splice(0, units.length, ...saved.units);
     for (const unit of [...units,...units.flatMap(carrier=>carrier.passengers??[])]) {
       const speed=PRODUCTS[unit.type]?.speed;
@@ -203,6 +220,7 @@ function startRound() {
   initialise(freshMatch('running',round,match.seed,match.buildingStylePreferences));
   addLog('第 '+round+' 局开始。玩家指挥蓝方，红方由指挥智能体控制。',null,0);
   const review=experience.enemy;
+  review.focus=review.focus.filter(task=>task!=='research');
   engine.FACTIONS.enemy.experience=review;
   if (review.sample) {
     addLog('红方复习最近 '+review.sample+' 局（'+review.wins+' 胜 '+review.losses+' 负 '+review.draws+' 平）。本局重点：'+
@@ -253,11 +271,7 @@ function observation(team) {
   const strategy = {
     ...pick(view, ['credits','power','support','factoryCount','factoryBonus','strategy','orders']),
     orders: pick(view.orders, ['mode','task','source']),
-    research: view.research ? pick(view.research, ['program','remaining']) : null,
     experience:review ? pick(review,['sample','wins','losses','draws','last','focus']) : null,
-    manufacturing: view.manufacturing ? pick(view.manufacturing, ['id','remaining']) : null,
-    discoveries: [...view.discoveries],
-    equipment: [...view.equipment],
     plan: plan ? { ...pick(plan, planKeys), followup: plan.followup ? pick(plan.followup, planKeys) : null } : null,
   };
   return {

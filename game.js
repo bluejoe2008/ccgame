@@ -88,9 +88,9 @@ const units=[mcv,enemyMcv];
 const structures=battlefield.oils.map(tile=>({type:'oil',...tile,team:'neutral',
   width:OIL_FIELD.width,height:OIL_FIELD.height,health:OIL_FIELD.health,remaining:0,queue:[]}));
 const FACTIONS=Object.fromEntries(['player','enemy'].map(team=>[team,{
-  team,credits:1250,nextOrder:0,searched:new Map(),discoveries:new Set(),equipment:new Set(),
+  team,credits:1250,nextOrder:0,searched:new Map(),
   strategy:(team==='player')===(MAP_SEED%2===0)?'conservative':'aggressive',expanding:false,nextExpansionPlan:0,
-  research:null,manufacturing:null,unitMix:0,vehicleMix:0,
+  unitMix:0,vehicleMix:0,
   reports:new Map(),defensive:false,recoveringAt:null,retreatBenchmark:0,threatPoint:null,
   explored:new Map(),sight:new Set(),scentTargets:new Set(),
   power:{supply:0,demand:0,rate:1},support:{fireRate:1,damage:1},factoryCount:0,factoryBonus:0,
@@ -150,8 +150,8 @@ const PRODUCTS = {
   engineer:{label:'工程师',cost:180,time:3.1,speed:1.275,vision:5.1,health:48,building:'barracks',icon:'▥'},
   rocketeer:{label:'火箭筒兵',cost:220,time:3.4,speed:1.175,vision:5.5,building:'barracks',icon:'➶'},
   mortar:{label:'迫击炮兵',cost:280,time:4.6,speed:1.025,vision:6.1,building:'barracks',icon:'↗'},
-  pulseTank:{label:'脉冲炮车',cost:780,time:8,speed:2.6,vision:6.5,building:'factory',tech:'pulse'},
-  siegeTank:{label:'震波攻城车',cost:760,time:8.5,speed:2.4,vision:7,building:'factory',tech:'shock'},
+  pulseTank:{label:'脉冲炮车',cost:780,time:8,speed:2.6,vision:6.5,building:'factory'},
+  siegeTank:{label:'震波攻城车',cost:760,time:8.5,speed:2.4,vision:7,building:'factory'},
   artillery:{label:'自行火炮',cost:590,time:6.2,speed:2.35,vision:7.2,building:'factory'},
   mcv:{label:'基地车',cost:2200,time:15,speed:2.55,vision:5.8,health:MCV_HEALTH,building:'factory'},
   horse:{label:'战马',cost:160,time:3.3,speed:4.6,vision:4.8,health:85,building:'barracks'},
@@ -160,16 +160,6 @@ const PRODUCTS = {
   bomber:{label:'轰炸机',cost:1100,time:10.6,speed:6.8,vision:7.8,building:'airport'},
   reconPlane:{label:'侦察机',cost:520,time:5.2,speed:10.2,vision:12,health:80,building:'airport'},
   helicopter:{label:'运输直升机',cost:740,time:7,speed:6.2,vision:6.8,health:115,building:'airport'},
-};
-const TECHNOLOGIES={
-  pulse:{label:'脉冲增幅',unit:'pulseTank',description:'解锁脉冲炮车，对装甲目标增强伤害'},
-  shock:{label:'震波弹药',unit:'siegeTank',description:'解锁震波攻城车，远程溅射伤害'},
-  catalyst:{label:'矿物催化',device:'催化精炼设备',income:'ore',bonus:.55,cost:360,time:6},
-  pressure:{label:'井压回收',device:'油井增压设备',income:'oil',bonus:.85,cost:360,time:6},
-};
-const RESEARCH_PROGRAMS={
-  weapons:{label:'攻击科技',cost:560,time:12,results:['pulse','shock']},
-  industry:{label:'经济科技',cost:460,time:10,results:['catalyst','pressure']},
 };
 const UNIT_ART = {
   miner:{bracket:48,hitWidth:57,hitHeight:53},
@@ -905,7 +895,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=human-match');
+      const worker=new Worker('terrain-worker.js?v=command-buttons');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2221,7 +2211,8 @@ function drawBuildingActivity(context,building,art) {
   if (!lights || team==='neutral' || building.health<=0 || building.remaining>0 ||
       reducedMotion.matches || observedMatch?.status!=='running') return;
   const rate=team===game.perspective?viewFaction().power.rate:1;
-  const active=team===game.perspective && (building.queue?.[0]?.remaining>0 || building.serviceStatus==='坦克维修中');
+  const job=building.queue?.[0];
+  const active=team===game.perspective && ((!job?.awaitingPayment && job?.remaining>0) || building.serviceStatus==='坦克维修中');
   const time=lastFrame*.001+hash(building.x,building.y,97)*5;
   const phase=time*(active?4:1.7)*(.55+.45*rate);
   const signal=type==='laser' || type==='solar' || type==='barracks';
@@ -3184,7 +3175,7 @@ function advanceMiner(miner,dt) {
     recordTravel(miner,0,dt);
     miner.unloadTimer-=dt*FACTIONS[miner.team].power.rate;
     if (miner.unloadTimer>0) return;
-    const hauled=Math.round(Math.round(miner.cargo)*5*incomeMultiplier(miner.team,'ore'));
+    const hauled=Math.round(miner.cargo)*5;
     treasury(miner.team).credits+=hauled;
     miner.cargo=0;
     miner.mode='idle';
@@ -4108,7 +4099,7 @@ function advanceOilFields() {
     if (field.type!=='oil' || field.team==='neutral' || field.nextPayout>game.time) continue;
     field.nextPayout+=OIL_INTERVAL;
     const account=treasury(field.team);
-    const income=Math.round(OIL_INCOME*incomeMultiplier(field.team,'oil')*account.power.rate);
+    const income=Math.round(OIL_INCOME*account.power.rate);
     if (field.oilOperation) field.oilOperation.income+=income;
     account.credits+=income;
     incomes[field.team]+=income;
@@ -4144,14 +4135,18 @@ function deployYard(vehicle) {
   return true;
 }
 
-function enqueue(building,type) {
+function enqueue(building,type,deferPayment=false) {
   const spec=PRODUCTS[type];
-  if (!spec || type==='fighter' || building?.type!==spec.building || building.remaining>0 ||
+  if (!spec || type==='fighter' || building?.type!==spec.building || (!deferPayment && building.remaining>0) ||
       !structures.includes(building)) return false;
   const account=treasury(building.team);
-  if (account.credits<spec.cost || (spec.tech && !account.discoveries.has(spec.tech))) return false;
-  account.credits-=spec.cost;
-  building.queue.push({type,remaining:spec.time});
+  if (!deferPayment && account.credits<spec.cost) return false;
+  const job={type,remaining:spec.time};
+  if (deferPayment) {
+    building.nextProductionId=(building.nextProductionId??0)+1;
+    Object.assign(job,{id:building.nextProductionId,awaitingPayment:true});
+  } else account.credits-=spec.cost;
+  building.queue.push(job);
   return true;
 }
 
@@ -4300,6 +4295,13 @@ function advanceProduction(dt) {
     }
     const job=building.queue[0];
     if (!job) continue;
+    if (job.awaitingPayment) {
+      const faction=treasury(building.team);
+      const cost=PRODUCTS[job.type].cost;
+      if (faction.credits<cost) continue;
+      faction.credits-=cost;
+      delete job.awaitingPayment;
+    }
     job.remaining=Math.max(0,job.remaining-dt*productionRate(building));
     if (job.remaining>0 || !spawnUnit(building,job.type)) continue;
     building.queue.shift();
@@ -4946,66 +4948,6 @@ function fortifyOilfields(faction,buildings) {
   }
 }
 
-function incomeMultiplier(team,source) {
-  const faction=treasury(team);
-  let bonus=0;
-  for (const id of faction.equipment) {
-    if (TECHNOLOGIES[id].income===source) bonus+=TECHNOLOGIES[id].bonus;
-  }
-  return 1+bonus;
-}
-
-function planResearch(faction,yard,allowNewProject=true) {
-  const {team}=faction;
-  const manufactured=[...faction.discoveries].find(id=>TECHNOLOGIES[id].device && !faction.equipment.has(id));
-  if (manufactured && !faction.manufacturing) {
-    const design=TECHNOLOGIES[manufactured];
-    if (faction.credits<design.cost) return true;
-    faction.credits-=design.cost;
-    faction.manufacturing={id:manufactured,remaining:design.time,facility:yard};
-    log(factionName(team)+'开始制造'+design.device+'，支出 '+design.cost+'。',team);
-  }
-  if (!allowNewProject || faction.research || faction.discoveries.size===Object.keys(RESEARCH_PROGRAMS).length) return false;
-  const available=Object.entries(RESEARCH_PROGRAMS).filter(([,program])=>
-    !program.results.some(id=>faction.discoveries.has(id)));
-  const program=available.length===1?available[0][1]:
-    available[Math.floor(Math.random()*available.length)][1];
-  if (faction.credits<program.cost) return true;
-  faction.credits-=program.cost;
-  faction.research={program,remaining:program.time,facility:yard};
-  log(factionName(team)+'启动未知'+program.label+'研发，支出 '+program.cost+'。',team);
-  return false;
-}
-
-function advanceResearch(dt) {
-  for (const faction of Object.values(FACTIONS)) {
-    for (const key of ['research','manufacturing']) {
-      const project=faction[key];
-      if (!project) continue;
-      if (!structures.includes(project.facility) || project.facility.team!==faction.team) {
-        faction[key]=null;
-        log(factionName(faction.team)+'失去建造场，'+(key==='research'?'研发':'设备制造')+'中断。',faction.team);
-        continue;
-      }
-      project.remaining=Math.max(0,project.remaining-dt*faction.power.rate);
-      if (project.remaining>0) continue;
-      faction[key]=null;
-      if (key==='research') {
-        const {results}=project.program;
-        const id=results[Math.floor(Math.random()*results.length)];
-        faction.discoveries.add(id);
-        const design=TECHNOLOGIES[id];
-        log(factionName(faction.team)+'发现「'+design.label+'」，可制造'+(design.device??PRODUCTS[design.unit].label)+'。',faction.team);
-      } else {
-        faction.equipment.add(project.id);
-        const design=TECHNOLOGIES[project.id];
-        log(factionName(faction.team)+design.device+'已投用，收入提高 '+Math.round(design.bonus*100)+'%。',faction.team);
-      }
-      playAt('ready',yardCenter(project.facility),project.facility);
-    }
-  }
-}
-
 function expansionSite(faction,vehicle,yards) {
   const mines=battlefield.seams.filter(mine=>faction.explored.has(tileKey(mine.x,mine.y)) &&
     amountAt(mine.x,mine.y)>0);
@@ -5416,7 +5358,6 @@ function advanceFaction(faction) {
     }
   }
 
-  let savingForResearch=false;
   if (constructionSite) maintainPower(faction,constructionSite,savingForEarlyMiner?PRODUCTS.miner.cost:0);
   if (!raid?.critical && !nextBase) developOutposts(faction,yards,buildings);
   const wantsExpansion=faction.orders.task==='mine' || (faction.credits>=2800 && faction.orders.mode==='develop');
@@ -5428,20 +5369,10 @@ function advanceFaction(faction) {
     if (!faction.defensive && army.length>=2 && game.time>=52 && faction.credits>=1000) {
       buildSupportFacilities(faction,constructionSite,buildings);
     }
-    if (readyYards.length && !faction.defensive && (faction.orders.task==='research' || faction.credits>=950)) {
-      savingForResearch=planResearch(faction,readyYards[0],faction.orders.task==='research');
-    }
   }
 
-  // Fund the first army before adding optional specialist equipment.
   const buildingArmy=buildings.some(b=>b.queue.some(job=>isArmyType(job.type)));
-  const advanced=Object.values(TECHNOLOGIES).map(design=>design.unit)
-    .find(type=>type && faction.discoveries.has(PRODUCTS[type].tech) && !members.some(unit=>unit.type===type) &&
-      !factories.some(site=>site.queue.some(job=>job.type===type)));
-  const savingForPrototype=!raid?.critical && !faction.defensive && advanced && factory && !factory.queue.length &&
-    faction.credits<PRODUCTS[advanced].cost;
-  const mayTrain=raid?.critical || (!nextBase && !savingForEarlyMiner && !savingForAir &&
-    !savingForResearch && !savingForPrototype && !savingForExpansion) ||
+  const mayTrain=raid?.critical || (!nextBase && !savingForEarlyMiner && !savingForAir && !savingForExpansion) ||
     (!army.length && !buildingArmy);
   advanceAiCapture(faction,barracks,members,mayTrain && !raid?.critical);
   if (mayTrain) {
@@ -5451,13 +5382,16 @@ function advanceFaction(faction) {
     const hostileAircraft=scouts.some(isAirborne);
     if (!raid?.critical && barracks && !barracks.queue.length && members.some(unit=>unit.type==='cavalry') &&
         !members.some(unit=>unit.type==='horse' && unit.health>0)) enqueue(barracks,'horse');
-    let prototype=advanced;
+    let heavyVehicle=!raid?.critical && !faction.defensive && army.length>=4 &&
+      (hostileArmor>=hostileInfantry?['pulseTank','siegeTank']:['siegeTank','pulseTank']).find(type=>
+        faction.credits>=PRODUCTS[type].cost+PRODUCTS.tank.cost && !members.some(unit=>unit.type===type) &&
+        !factories.some(site=>site.queue.some(job=>job.type===type)));
     for (const site of idleFactories) {
       if (site.queue.length) continue;
       const siege=faction.orders.task==='strike' && BUILDINGS[faction.orders.target?.type]?.weapon;
       const vehicle=!raid?.critical && (siege || faction.vehicleMix%3===2)?'artillery':'tank';
-      if (prototype && enqueue(site,prototype)) {
-        prototype=null;
+      if (heavyVehicle && enqueue(site,heavyVehicle)) {
+        heavyVehicle=null;
         faction.vehicleMix++;
       } else if (enqueue(site,vehicle) || enqueue(site,'tank')) {
         faction.vehicleMix++;
@@ -5477,7 +5411,7 @@ function advanceFaction(faction) {
     buildDefenses(faction,constructionSite,buildings,intelligence.contacts);
   }
   if (!raid?.critical && !rushingDefenses && !nextBase && !savingForEarlyMiner && !savingForAir &&
-      !savingForExpansion && !savingForResearch) fortifyOilfields(faction,buildings);
+      !savingForExpansion) fortifyOilfields(faction,buildings);
 }
 
 function distanceTo(a,b) {
@@ -5581,17 +5515,16 @@ function executePlayerOrder(order,resolve) {
     log('蓝方基地车开始部署。',faction.team);
     return success();
   }
-  if (order.kind==='produce' || order.kind==='research') {
-    if (!ready(selected)) return fail('unavailable');
-    if (order.kind==='research') {
-      if (selected.type!=='yard') return fail('unavailable');
-      const {research,manufacturing}=faction;
-      planResearch(faction,selected);
-      return research!==faction.research || manufacturing!==faction.manufacturing ? success() : fail('research');
+  if (order.kind==='produce' || order.kind==='cancel-production') {
+    if (!own(selected) || !selected.width) return fail('unavailable');
+    if (order.kind==='cancel-production') {
+      const index=selected.queue.findIndex(job=>job.awaitingPayment && job.id===order.job);
+      if (index<0) return fail('unavailable');
+      selected.queue.splice(index,1);
+      return success();
     }
     if (typeof order.type!=='string' || !Object.hasOwn(PRODUCTS,order.type)) return fail('invalid');
-    if (!enqueue(selected,order.type)) return fail(faction.credits<PRODUCTS[order.type].cost?'credits':'unavailable');
-    return success();
+    return enqueue(selected,order.type,true)?success():fail('unavailable');
   }
   if (order.kind==='build' || order.kind==='move' || order.kind==='rally') {
     const {x,y}=order;
@@ -6146,35 +6079,81 @@ function weaponRangeLabel(weapon) {
   return (weapon.minimum?weapon.minimum+'–':'')+weapon.range+' 格';
 }
 
+function purchaseButton(type,spec,label=spec.label) {
+  const button=document.createElement('button');
+  button.type='button';
+  button.className='command';
+  button.dataset.type=type;
+  const name=document.createElement('span');
+  name.textContent=label;
+  const price=document.createElement('strong');
+  price.textContent=spec.cost;
+  button.append(name,price);
+  return button;
+}
+
+function syncProductionQueue(building) {
+  const list=byId('production-queue');
+  list.hidden=!building.queue.length;
+  const state=JSON.stringify([building.viewId,building.queue.map(job=>[job.type,job.id,job.awaitingPayment])]);
+  if (list.dataset.state===state) return;
+  list.dataset.state=state;
+  list.replaceChildren(...building.queue.map(job=>{
+    const label=PRODUCTS[job.type].label;
+    const item=document.createElement('li');
+    const row=document.createElement('div');
+    const name=document.createElement('span');
+    name.textContent=label;
+    row.append(name);
+    if (job.awaitingPayment) {
+      const cancel=document.createElement('button');
+      cancel.type='button';
+      cancel.dataset.job=job.id;
+      cancel.textContent='取消';
+      cancel.setAttribute('aria-label','取消生产'+label);
+      row.append(cancel);
+    }
+    item.append(row);
+    return item;
+  }));
+}
+
 function syncPlayerBuildingControls(building) {
   const controls=byId('building-controls');
-  controls.hidden=!playerCanCommand() || !readyConstructionSite(building,'player');
+  controls.hidden=!playerCanCommand() || building.team!=='player' || building.health<=0 || Boolean(game.placement);
   if (controls.hidden) return;
-  const faction=FACTIONS.player;
-  const construction=byId('construction-type');
-  for (const option of construction.options) {
-    option.disabled=faction.credits<BUILDINGS[option.value==='wall-y'?'wall':option.value].cost;
+  const construction=byId('construction-control');
+  construction.hidden=!readyConstructionSite(building,'player');
+  if (!construction.hidden) {
+    for (const button of byId('construction-options').children) {
+      button.disabled=FACTIONS.player.credits<BUILDINGS[button.dataset.type].cost;
+      button.title=button.disabled?'储备不足':'点击后在地图上选址';
+    }
   }
-  byId('place-building').disabled=Boolean(construction.selectedOptions[0]?.disabled);
-  const products=byId('production-type');
+  const products=byId('production-options');
   if (products.dataset.source!==building.type) {
     products.dataset.source=building.type;
     products.replaceChildren(...Object.entries(PRODUCTS).filter(([type,spec])=>type!=='fighter' && spec.building===building.type)
-      .map(([type,spec])=>new Option(spec.label+' · '+spec.cost,type)));
+      .map(([type,spec])=>purchaseButton(type,spec)));
   }
-  for (const option of products.options) {
-    const spec=PRODUCTS[option.value];
-    option.disabled=faction.credits<spec.cost || Boolean(spec.tech && !faction.discoveries.has(spec.tech));
-  }
-  byId('production-control').hidden=!products.options.length;
-  byId('produce-unit').disabled=!products.value || Boolean(products.selectedOptions[0]?.disabled);
-  byId('research-tech').hidden=building.type!=='yard';
+  byId('production-control').hidden=!products.childElementCount;
+  controls.hidden=construction.hidden && !products.childElementCount;
+  syncProductionQueue(building);
 }
 
 function syncBuildMenu() {
   const building=game.selectedBuilding;
   buildingMenu.hidden=!building;
   if (!building) return;
+  const placing=Boolean(game.placement);
+  buildingMenu.classList.toggle('is-placing',placing);
+  byId('close-building').setAttribute('aria-label',placing?'取消放置':'取消选择');
+  if (placing) {
+    byId('building-controls').hidden=true;
+    byId('building-name').textContent='放置'+BUILDINGS[game.placement.type].label;
+    positionBuildingMenu(building);
+    return;
+  }
   const spec=buildingSpec(building.type);
   const job=building.team===game.perspective?building.queue[0]:null;
   const weapon=spec.weapon;
@@ -6185,11 +6164,15 @@ function syncBuildMenu() {
     progress=(1-building.remaining/spec.time)*100;
   } else if (job) {
     const product=PRODUCTS[job.type];
-    status=product.label+' · '+(job.remaining>0?(job.remaining/productionRate(building)).toFixed(1)+' 秒':'等待出口空出');
-    progress=(1-job.remaining/product.time)*100;
+    if (job.awaitingPayment) {
+      status=product.label+' · '+(FACTIONS[building.team].credits<product.cost?'等待储备':'待开工');
+    } else {
+      status=product.label+' · '+(job.remaining>0?(job.remaining/productionRate(building)).toFixed(1)+' 秒':'等待出口空出');
+      progress=(1-job.remaining/product.time)*100;
+    }
   } else if (building.type==='oil') {
     status=building.team==='neutral'?'首占 +'+OIL_CAPTURE_BONUS+' · 满供电每 '+OIL_INTERVAL+' 秒 +'+OIL_INCOME:
-      '下次收入 +'+Math.round(OIL_INCOME*incomeMultiplier(building.team,'oil')*FACTIONS[building.team].power.rate)+' · '+
+      '下次收入 +'+Math.round(OIL_INCOME*FACTIONS[building.team].power.rate)+' · '+
       Math.max(0,Math.ceil(building.nextPayout-game.time))+' 秒';
   } else if (spec.powerOutput) {
     status='发电量 '+spec.powerOutput;
@@ -6267,44 +6250,56 @@ function syncPlayerPointer() {
 }
 
 function attachPlayerControls() {
-  const construction=byId('construction-type');
-  for (const [type,spec] of Object.entries(BUILDINGS)) {
-    construction.add(new Option(spec.label+' · '+spec.cost,type));
-    if (type==='wall') construction.add(new Option('城墙（另一方向） · '+spec.cost,'wall-y'));
+  const construction=byId('construction-options');
+  const opening=['refinery','solar','barracks','factory'];
+  for (const type of [...opening,...Object.keys(BUILDINGS).filter(type=>!opening.includes(type))]) {
+    const spec=BUILDINGS[type];
+    if (type==='wall') {
+      const wallX=purchaseButton(type,spec,'城墙 ↘'),wallY=purchaseButton(type,spec,'城墙 ↗');
+      wallY.dataset.axis='y';
+      construction.append(wallX,wallY);
+    } else construction.append(purchaseButton(type,spec));
   }
-  for (const id of ['construction-type','production-type']) byId(id).addEventListener('change',syncBuildMenu);
   byId('deploy-base').addEventListener('click',()=>{
     const unit=deployCandidate();
     if (unit) void sendPlayerOrder({kind:'deploy',source:unit.viewId},'基地车开始部署。');
   });
-  byId('place-building').addEventListener('click',()=>{
-    if (!playerCanCommand() || !game.selectedBuilding) return;
-    const choice=construction.value;
-    game.placement={source:game.selectedBuilding.viewId,type:choice==='wall-y'?'wall':choice,axis:choice==='wall-y'?'y':'x'};
-    notice('点击地图放置'+BUILDINGS[game.placement.type].label+'，右键取消。');
+  construction.addEventListener('click',event=>{
+    const button=event.target.closest('button[data-type]');
+    if (!button || button.disabled || !playerCanCommand() || !game.selectedBuilding) return;
+    const {type,axis='x'}=button.dataset;
+    game.placement={source:game.selectedBuilding.viewId,type,axis};
+    notice('点击地图放置'+BUILDINGS[type].label+'，右键取消。');
+    syncBuildMenu();
+    map.focus({preventScroll:true});
   });
-  byId('produce-unit').addEventListener('click',()=>{
-    const type=byId('production-type').value;
-    if (game.selectedBuilding && PRODUCTS[type]) {
+  byId('production-options').addEventListener('click',event=>{
+    const type=event.target.closest('button[data-type]')?.dataset.type;
+    if (type && game.selectedBuilding) {
       void sendPlayerOrder({kind:'produce',source:game.selectedBuilding.viewId,type},PRODUCTS[type].label+'已加入生产队列。');
     }
   });
-  byId('research-tech').addEventListener('click',()=>{
-    if (game.selectedBuilding) void sendPlayerOrder({kind:'research',source:game.selectedBuilding.viewId},'科技项目已启动。');
+  byId('production-queue').addEventListener('click',event=>{
+    const button=event.target.closest('button[data-job]');
+    if (button && game.selectedBuilding) {
+      void sendPlayerOrder({kind:'cancel-production',source:game.selectedBuilding.viewId,job:Number(button.dataset.job)},'已取消排队订单。');
+    }
   });
 }
 
-function syncResearchHud() {
+function syncCommanderHud() {
   for (const faction of Object.values(FACTIONS)) {
     const key=factionTint(faction.team);
-    byId(key+'-research').parentElement.hidden=faction.team!==game.perspective;
+    const summary=byId(key+'-command');
+    summary.parentElement.hidden=faction.team!==game.perspective;
     if (faction.team!==game.perspective) continue;
     const human=faction.team==='player' && observedMatch?.mode==='human';
     const lines=[human?'玩家指挥':faction.strategy==='conservative'?'保守型':'进取型'];
     if (faction.experience?.sample) {
       const {sample,wins,losses,draws,focus}=faction.experience;
       lines.push('复盘最近 '+sample+' 局 · '+wins+' 胜 '+losses+' 负 '+draws+' 平');
-      if (focus.length) lines.push('本局重点：'+focus.map(task=>COMMAND_TASKS[task].label).join('、'));
+      const activeFocus=focus.filter(task=>Object.hasOwn(COMMAND_TASKS,task));
+      if (activeFocus.length) lines.push('本局重点：'+activeFocus.map(task=>COMMAND_TASKS[task].label).join('、'));
     }
     const plan=faction.commander.plan;
     if (!human) lines.push((plan?commandLabel(plan):faction.orders.mode==='guard'?'紧急回援':'部署基地')+
@@ -6319,24 +6314,7 @@ function syncResearchHud() {
     if (faction.support.fireRate>1) buffs.push('射速 +'+Math.round((faction.support.fireRate-1)*100)+'%');
     if (faction.support.damage>1) buffs.push('伤害 +'+Math.round((faction.support.damage-1)*100)+'%');
     if (buffs.length) lines.push(buffs.join(' · '));
-    if (faction.research) lines.push('未知'+faction.research.program.label+' · '+Math.ceil(faction.research.remaining)+' 秒');
-    if (faction.manufacturing) lines.push(TECHNOLOGIES[faction.manufacturing.id].device+'制造中 · '+
-      Math.ceil(faction.manufacturing.remaining)+' 秒');
-    byId(key+'-research').textContent=lines.join(' / ') || '暂无进行中的项目';
-    const list=byId(key+'-tech');
-    const entries=[...faction.discoveries].map(id=>{
-      const design=TECHNOLOGIES[id];
-      return design.label+' · '+(design.description??(design.device+(faction.equipment.has(id)?
-        '已投用，收入 +'+Math.round(design.bonus*100)+'%':'已解锁')));
-    });
-    const combined=entries.join('\n');
-    if (list.dataset.entries===combined) continue;
-    list.dataset.entries=combined;
-    list.replaceChildren(...entries.map(content=>{
-      const item=document.createElement('li');
-      item.textContent=content;
-      return item;
-    }));
+    summary.textContent=lines.join(' / ');
   }
 }
 
@@ -6415,7 +6393,7 @@ function syncHud() {
   const hint=playerCanCommand()?'左键选择或下令 · 右键取消':factionName(game.perspective)+'视角 · 拖动地图或点击小地图';
   byId('instruction').textContent=(game.noticeUntil>game.time && game.notice) ||
     (game.follow?'跟踪中 · '+factionName(game.follow.team)+game.follow.label:hint);
-  syncResearchHud();
+  syncCommanderHud();
   syncBuildMenu();
   syncPlayerPointer();
 }
@@ -6564,9 +6542,13 @@ function mapClick(point) {
     const tile={x:Math.round(world.x),y:Math.round(world.y)};
     const placement=game.placement;
     if (placement) {
+      if (placement.submitted) return;
+      placement.submitted=true;
       const {source,type,axis}=placement;
       void sendPlayerOrder({kind:'build',source,type,axis,...tile},BUILDINGS[type].label+'开始施工。').then(ok=>{
-        if (ok && game.placement===placement) game.placement=null;
+        if (game.placement!==placement) return;
+        if (ok) game.placement=null;
+        else placement.submitted=false;
       });
       return;
     }
@@ -6755,7 +6737,13 @@ for (const [id,team,origin] of [['view-blue','player',mcv],['view-red','enemy',e
     changeObserverPerspective(team,origin);
   });
 }
-byId('close-building').addEventListener('click',()=>selectUnit(null));
+byId('close-building').addEventListener('click',()=>{
+  if (game.placement) {
+    game.placement=null;
+    notice('已取消放置。');
+    syncBuildMenu();
+  } else selectUnit(null);
+});
 byId('focus').addEventListener('click',focusUnit);
 byId('help-button').addEventListener('click',()=>byId('help').showModal());
 byId('fullscreen').addEventListener('click',async()=>{
@@ -6831,7 +6819,6 @@ function stepSimulation(dt) {
     advanceProduction(dt);
     advanceRepairs(dt);
     for (const faction of Object.values(FACTIONS)) advanceFaction(faction);
-    advanceResearch(dt);
     advanceCombat(dt);
     for (const unit of units) advanceTurret(unit,dt);
     if (!game.outcome) advanceOilFields();

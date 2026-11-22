@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=human-match">
+  <link rel="stylesheet" href="style.css?v=command-buttons">
   <script src="audio.js?v=laser-mix" defer></script>
-  <script src="commander.js?v=reconnaissance" defer></script>
+  <script src="commander.js?v=command-buttons" defer></script>
   <script src="building-themes.js?v=4" defer></script>
-  <script src="observer.js?v=human-match" defer></script>
+  <script src="observer.js?v=command-buttons" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -64,11 +64,11 @@
               <p id="style-status" role="status"></p>
             </div>
           </details>
-          <details class="log-block tech-block">
-            <summary>科技与指挥</summary>
-            <div class="tech-panel" id="tech-panel">
-              <section><h3>蓝方</h3><p id="blue-research"></p><ul id="blue-tech"></ul></section>
-              <section><h3>红方</h3><p id="red-research"></p><ul id="red-tech"></ul></section>
+          <details class="log-block command-block">
+            <summary>指挥</summary>
+            <div class="command-panel">
+              <section><h3>蓝方</h3><p id="blue-command"></p></section>
+              <section><h3>红方</h3><p id="red-command"></p></section>
               <section><button id="open-drills" type="button" class="metal-button">场景操练</button></section>
             </div>
           </details>
@@ -112,17 +112,15 @@
             <progress id="repair-bar" class="production-bar" max="100" value="0" aria-label="建筑耐久"></progress>
           </div>
           <div id="building-controls" class="building-controls" hidden>
-            <div class="building-control">
-              <label for="construction-type">新建建筑</label>
-              <select id="construction-type"></select>
-              <button id="place-building" class="metal-button" type="button">选位置</button>
-            </div>
             <div id="production-control" class="building-control" hidden>
-              <label for="production-type">生产单位</label>
-              <select id="production-type"></select>
-              <button id="produce-unit" class="metal-button" type="button">生产</button>
+              <h4 id="production-heading">生产单位</h4>
+              <div id="production-options" class="commands build-options" role="group" aria-labelledby="production-heading"></div>
+              <ol id="production-queue" class="production-queue" aria-label="生产队列" hidden></ol>
             </div>
-            <button id="research-tech" class="metal-button" type="button" hidden>研发科技</button>
+            <div id="construction-control" class="building-control">
+              <h4 id="construction-heading">新建建筑</h4>
+              <div id="construction-options" class="commands build-options" role="group" aria-labelledby="construction-heading"></div>
+            </div>
           </div>
         </section>
         <div class="map-hud">
@@ -196,10 +194,9 @@
         <div><dt>人机对战</dt><dd>点击「人机对战」指挥蓝方，红方由指挥智能体控制。对局在服务器运行，刷新页面会回到当前进度。胜负确定或点击「结束本局」后，可手动开始下一局。</dd></div>
         <div><dt>下达指令</dt><dd>左键选择单位，拖选多个单位，再左键指定目的地或敌方目标。右键取消选择。选中工程师后点击可见油田或敌方建筑可尝试占领。选中兵工厂或兵营后点击空地可设集结点。</dd></div>
         <div><dt>视野</dt><dd>人机局中可用鼠标中键拖动、方向键和小地图移动视野，按 F 跟踪所选单位。已探开的区域持续可见，被摧毁的油田会留下遗址标记。观战时可切换红蓝方视角。</dd></div>
-        <div><dt>建造和收入</dt><dd>鼠标移到基地车上，点击旁边的「部署」。选中已启用的己方建筑后，选择建筑类型，再点击地图上的空地。包括已占领油田在内的己方建筑都提供 10 格建造半径。精炼厂会配发一辆自动采矿的矿车，油田满供电时每 15 秒提供 280 储备，首次占领奖励 260。</dd></div>
+        <div><dt>建造和收入</dt><dd>鼠标移到基地车上，点击旁边的「部署」。选中已启用的己方建筑后，点一下建筑按钮，再点击地图上的空地。点击单位按钮可直接加入生产队列。包括已占领油田在内的己方建筑都提供 10 格建造半径。精炼厂会配发一辆自动采矿的矿车，油田满供电时每 15 秒提供 280 储备，首次占领奖励 260。</dd></div>
         <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>
-        <div><dt>科技</dt><dd>双方可投入储备研发未知的攻击或经济科技。成果公开后可再花费资金制造超级武器或增收设备。点击「科技」查看进度。</dd></div>
-        <div><dt>电力与生产</dt><dd>多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。电厂被摧毁后，供电不足会拖慢兵工厂和兵营的生产。</dd></div>
+        <div><dt>电力与生产</dt><dd>点击单位按钮即可排队。设施完工后按下单顺序开工，有足够储备才扣款生产，未开工的订单可以取消。多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。</dd></div>
         <div><dt>空军</dt><dd>机场生产轰炸机、侦察机和运输直升机。轰炸机单次投弹后返航，侦察机负责探路，运输直升机最多搭载四名友方人员或军犬。固定翼飞机失去可用跑道后会迫降坠毁。</dd></div>
         <div><dt>坦克维修</dt><dd>修理厂每次接收一辆受损坦克。坦克会自行驶入维修区，维修消耗储备，完成后驶离修理厂。</dd></div>
         <div><dt>休闲与训练</dt><dd>棋牌室提高活动单位射速，训练操场提高活动单位伤害。供电不足会减弱加成。</dd></div>

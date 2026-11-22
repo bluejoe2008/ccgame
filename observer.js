@@ -5,7 +5,7 @@ let lastLog = 0;
 let lastSound = null;
 let pendingControl = false;
 let pendingBuildingStyle = false;
-let pendingOrder = false;
+let playerOrderRequests = Promise.resolve();
 let observerConnected = true;
 let observationRequest = 0;
 let observationTimer;
@@ -74,32 +74,32 @@ const orderErrors={
   inactive:'当前没有可指挥的人机对局。', invalid:'请点击地图内的有效位置。', unavailable:'所选单位或目标无法执行该指令。',
   placement:'这里无法建造。请选择范围内已探明的空地。', credits:'储备不足。', unexplored:'请先探索该区域。',
   route:'无法到达目标位置。', capture:'工程师无法接近占领目标。', transport:'请让人员靠近已落地且有空位的直升机。',
-  research:'暂无可启动的项目，或储备不足。',
 };
 
-async function sendPlayerOrder(order,message) {
-  if (!playerCanCommand() || pendingOrder) return false;
+function sendPlayerOrder(order,message) {
+  if (!playerCanCommand()) return Promise.resolve(false);
   const current=observedMatch.id;
-  pendingOrder=true;
-  try {
-    const response=await fetch('/api/match/order',{
-      method:'POST',headers:{'Content-Type':'application/json','X-Match-Id':current},
-      body:JSON.stringify(order),signal:AbortSignal.timeout(9000),
-    });
-    const result=await response.json();
-    if (!response.ok) {
-      notice(orderErrors[result.error]??'指令未能完成，请重试。');
+  playerOrderRequests=playerOrderRequests.then(async()=>{
+    if (!playerCanCommand() || observedMatch.id!==current) return false;
+    try {
+      const response=await fetch('/api/match/order',{
+        method:'POST',headers:{'Content-Type':'application/json','X-Match-Id':current},
+        body:JSON.stringify(order),signal:AbortSignal.timeout(9000),
+      });
+      const result=await response.json();
+      if (!response.ok) {
+        notice(orderErrors[result.error]??'指令未能完成，请重试。');
+        return false;
+      }
+      notice(message);
+      await pollObservation();
+      return true;
+    } catch {
+      notice('连接中断，未能确认指令结果。');
       return false;
     }
-    notice(message);
-    await pollObservation();
-    return true;
-  } catch {
-    notice('连接中断，未能确认指令结果。');
-    return false;
-  } finally {
-    pendingOrder=false;
-  }
+  });
+  return playerOrderRequests;
 }
 
 function updateBuildingStyleControls() {
@@ -343,11 +343,9 @@ function applyObservation(snapshot) {
     unit.scentTarget = entity(unit.scentId);
   }
   faction.scentTargets = new Set(snapshot.scents.map(entity).filter(Boolean));
-  const { plan, discoveries, equipment, ...strategy } = snapshot.strategy;
+  const { plan, ...strategy } = snapshot.strategy;
   Object.assign(faction,strategy);
   faction.commander.plan = plan;
-  faction.discoveries = new Set(discoveries);
-  faction.equipment = new Set(equipment);
   shots.splice(0,shots.length,...snapshot.shots);
   wrecks.splice(0,wrecks.length,...snapshot.wrecks);
   movementDust.splice(0,movementDust.length,...snapshot.dust);
@@ -473,7 +471,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=human-match';
+  script.src = 'game.js?v=command-buttons';
   document.head.append(script);
 }
 bootObserver();

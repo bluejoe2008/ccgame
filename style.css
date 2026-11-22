@@ -224,13 +224,22 @@ h1,h2 { margin: 0; }
 .building-menu h3 { font-size: 13px; margin: 0; }
 .building-menu #close-building { min-width: 24px; min-height: 23px; padding: 0 3px; font-size: 16px; }
 .building-controls { display: grid; gap: 7px; margin-top: 8px; border-top: 1px solid #626a4f80; padding-top: 7px; }
-.building-control { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px; align-items: center; }
-.building-control label { grid-column: 1/-1; color: var(--muted); font-size: 10px; }
-.building-control select {
-  width: 100%; min-width: 0; height: 28px; padding: 2px 4px;
-  color: var(--text); background: #222c21; border: 1px solid #59684d; font-size: 11px;
+.building-control h4 { margin: 0 0 5px; color: #bec9aa; font-size: 11px; }
+.building-menu:has(#building-controls:not([hidden])) { width: min(300px, 64%); }
+.building-menu.is-placing { width: auto; }
+.building-menu.is-placing > header { margin-bottom: 0; }
+.building-menu.is-placing > :not(header) { display: none; }
+.production-queue {
+  max-height: 105px; overflow: auto; margin: 6px 0 0; padding: 3px 0 0 24px;
+  border-top: 1px solid #626a4f80; font-size: 11px;
 }
-.building-controls .metal-button { min-height: 28px; font-size: 11px; }
+.production-queue li { padding: 3px 0; color: #dce3ca; }
+.production-queue li > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.production-queue button {
+  min-height: 24px; padding: 0 6px; color: #dac388; background: #273024;
+  border: 1px solid #59654b; font-size: 10px;
+}
+.production-queue button:hover { background: #414c37; }
 #map.targeting { cursor: none !important; }
 .target-cursor {
   position: absolute; z-index: 3; top: 0; left: 0; width: 30px; height: 30px;
@@ -363,6 +372,11 @@ h1,h2 { margin: 0; }
   white-space: nowrap;
 }
 .build-options .command { gap: 5px; }
+.build-options .command:focus-visible { outline: 2px solid #e1c17b; outline-offset: -2px; }
+.build-options .command:disabled { opacity: .53; cursor: not-allowed; background: #273024; }
+.build-options .command > span { overflow-wrap: anywhere; }
+.build-options .command strong { flex-shrink: 0; }
+@media (pointer: coarse) { .build-options .command { min-height: 42px; } }
 .production-status { margin: 8px 0 0; color: var(--muted); font-size: 10px; }
 .production-bar {
   display: block;
@@ -436,7 +450,7 @@ h1,h2 { margin: 0; }
   line-height: 1.42;
 }
 .log-block time { font: 10px/1 "IBM Plex Mono",monospace; color: #a8b38d; }
-.tech-panel {
+.command-panel {
   position: absolute;
   right: 10px;
   top: 100%;
@@ -446,12 +460,10 @@ h1,h2 { margin: 0; }
   border: 1px solid #59654b;
   box-shadow: 0 5px 20px #080d08b0;
 }
-.tech-panel section { min-width: 0; padding: 11px 13px; }
-.tech-panel h3 { margin: 0; color: #9bcbef; font-size: 13px; }
-.tech-panel section + section h3 { color: #f29a84; }
-.tech-panel p { margin: 6px 0 3px; color: var(--muted); }
-.tech-panel ul { margin: 0; padding: 0; list-style: none; }
-.tech-panel li { display: block; }
+.command-panel section { min-width: 0; padding: 11px 13px; }
+.command-panel h3 { margin: 0; color: #9bcbef; font-size: 13px; }
+.command-panel section + section h3 { color: #f29a84; }
+.command-panel p { margin: 6px 0 3px; color: var(--muted); }
 dialog {
   width: min(500px, calc(100vw - 24px));
   max-height: calc(100dvh - 40px);

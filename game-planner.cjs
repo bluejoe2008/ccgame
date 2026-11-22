@@ -43,9 +43,6 @@ const TASK_KINDS = {
   ],
   "fortify": [
     "defense"
-  ],
-  "research": [
-    "research"
   ]
 };
 const OWN_FIELDS = ["aircraft", "airports", "army", "barracks", "credits", "defenses", "factories", "home_guard", "home_threat", "miners", "miners_ordered", "oil", "ore", "power", "strength"];
