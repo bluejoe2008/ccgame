@@ -51,16 +51,16 @@ const MAP_SEED=globalThis.matchEngine?.seed??globalThis.matchBootstrap?.seed??
   crypto.getRandomValues(new Uint32Array(1))[0];
 const BOARD={left:-51*U,right:51*U,top:-47*V,bottom:47*V};
 const SURFACES = {
-  field:[131,143,83,0,.69,0], meadow:[146,155,86,0,1,0], scrub:[94,111,66,0,.8,.08],
-  dirt:[160,133,91,0,.22,.72], road:[149,120,87,0,.07,.40],
-  concrete:[132,133,120,0,0,.40], bank:[185,162,107,.10,.08,.38],
-  water:[39,54,76,1,0,0], rock:[133,103,72,0,.1,1], hill:[145,133,77,0,.57,.42],
-  bridge:[76,81,86,0,0,.35],
+  field:[118,136,93,0,.69,0], meadow:[138,155,105,0,1,0], scrub:[86,113,79,0,.8,.08],
+  dirt:[154,134,104,0,.22,.72], road:[142,123,99,0,.07,.40],
+  concrete:[125,132,129,0,0,.40], bank:[162,149,112,.10,.14,.38],
+  water:[57,87,78,1,0,0], rock:[122,122,104,0,.1,1], hill:[109,130,96,0,.76,.38],
+  bridge:[109,118,116,0,0,.35],
 };
 const COLORS = {
-  field: '#6f8549', meadow: '#879657', scrub: '#4f6842', dirt: '#9a7a50', road: '#92704c',
-  concrete: '#7b8980', bank: '#b59b66', water: '#3c5675', rock: '#876449', hill:'#ab8d58',
-  bridge: '#7b8791',
+  field: '#778a5f', meadow: '#8f9d6c', scrub: '#527150', dirt: '#9b8668', road: '#927b62',
+  concrete: '#7d8481', bank: '#a89771', water: '#3b655d', rock: '#77796b', hill:'#6c845f',
+  bridge: '#788583',
 };
 
 const deposits = new Map();
@@ -729,8 +729,9 @@ const TANK_TURRET_POSES=[
   {rect:[959,900,268,193],mount:[1051,1064],width:78},
 ];
 const buildingSpriteWidths={yard:205,refinery:232,factory:205,repairDepot:188,barracks:163,airport:270,
-  oil:148,sentry:82,turret:157,bunker:155,wall:56,laser:132,solar:147,diesel:199,recreation:152,training:201};
-const retroBuildings=new Set(['yard','barracks','refinery','factory','solar','diesel','airport','laser']);
+  oil:148,sentry:82,turret:157,bunker:128,wall:56,laser:132,solar:147,diesel:199,recreation:116,training:201};
+// The server uses the same optical emitter position when creating a laser effect.
+const LASER_ART={aspect:420/262,emitter:[.51,.20]};
 let poorOreArt=null;
 let groundTexture=null;
 if (!ENGINE_ONLY) {
@@ -743,15 +744,12 @@ for (const type of Object.keys(unitSpriteWidths)) {
   }
 }
 for (const type of Object.keys(buildingSpriteWidths)) {
-  const variants=type==='wall'?['wall-x','wall-y']:[type];
-  for (const variant of variants) {
-    for (const tint of ['blue','red']) {
-      const key=variant+'-'+tint;
-    asset(key,type==='repairDepot'?'retro-yard-'+tint:retroBuildings.has(type)?'retro-'+key:key);
-    }
-  }
+  if (type==='wall') continue;
+  for (const tint of ['blue','red']) asset(type+'-'+tint,'jiangnan-'+type+'-'+tint);
 }
-for (const name of ['forest','stone','coast-palm','coast-fan','coast-cliff','coast-stone']) asset(name);
+for (const axis of ['x','y']) asset('wall-'+axis,'jiangnan-wall-'+axis);
+asset('oil-neutral','jiangnan-oil-neutral');
+for (const name of ['bamboo','pine','reeds','limestone','karst','river-stones']) asset(name,'jiangnan-'+name);
 const oreImage=asset('ore');
 oreImage.addEventListener('load',()=>{
   const image=document.createElement('canvas');
@@ -763,7 +761,7 @@ oreImage.addEventListener('load',()=>{
   poorOreArt=image;
 });
 
-const groundImage=asset('ground');
+const groundImage=asset('ground','jiangnan-ground');
 groundImage.addEventListener('load',()=>{
   const source=document.createElement('canvas');
   source.width=groundImage.width;
@@ -876,7 +874,7 @@ function paintTerrainChunk(cx,cy,tile,step=TEXTURE_STEP) {
         (speck>.984?10+rock*12:speck<.013?-11:0);
       const reflection=Math.max(0,waterLines-.33)*(2+fleck*8);
       const moist=macro*17+waterLines*(1.9+granule*3)+patches*11+(speck-.5)*6+reflection;
-      const concrete=mix(mix(Number(a===SURFACES.concrete),Number(b===SURFACES.concrete),fx),
+      const concrete=bridge?1:mix(mix(Number(a===SURFACES.concrete),Number(b===SURFACES.concrete),fx),
         mix(Number(c===SURFACES.concrete),Number(d===SURFACES.concrete),fx),fy);
       const elevation=hasRelief?heightAt(w.x,w.y):0;
       const relief=elevation?2.4*(heightAt(w.x+.4,w.y+.25)-heightAt(w.x-.4,w.y-.25))+elevation*.16:0;
@@ -910,7 +908,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=terrain-seams');
+      const worker=new Worker('terrain-worker.js?v=jiangnan');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2178,35 +2176,38 @@ function constructionFrame(image) {
 }
 
 function structureArt(building) {
-  const variant=building.type==='wall'?'wall-'+(building.axis??'x'):building.type;
-  const image=sprites.get(variant+'-'+factionTint(building.team));
+  const {type}=building;
+  const tint=building.team==='neutral'?'neutral':factionTint(building.team);
+  const image=sprites.get(type==='wall'?'wall-'+(building.axis??'x'):type+'-'+tint);
   const position=yardCenter(building);
   const center=project(position.x,position.y);
-  const width=buildingSpriteWidths[building.type];
-  const height=image?.naturalWidth?width*image.naturalHeight/image.naturalWidth:buildingSpec(building.type).roof;
-  const bottom=center.y+V*(building.width+building.height)*(building.type==='wall'?.37:.48);
-  const progress=building.remaining>0?1-building.remaining/buildingSpec(building.type).time:1;
+  const width=buildingSpriteWidths[type];
+  const height=type==='laser'?width*LASER_ART.aspect:
+    image?.naturalWidth?width*image.naturalHeight/image.naturalWidth:buildingSpec(type).roof;
+  const bottom=center.y+V*(building.width+building.height)*(type==='wall'?.37:.48);
+  const progress=building.remaining>0?1-building.remaining/buildingSpec(type).time:1;
   return {image,left:center.x-width/2,width,height,bottom,top:bottom-height,progress};
 }
 
 // Operating effects sit on features shared by the two painted faction variants.
 const buildingLights={
-  yard:[[.455,.522],[.642,.459],[.689,.451]],
-  factory:[[.59,.548],[.77,.434]],
-  repairDepot:[[.645,.46]],
-  refinery:[[.453,.461]],
-  barracks:[[.567,.028],[.176,.621],[.449,.733]],
-  airport:[[.246,.149],[.352,.915],[.489,.856],[.636,.790],[.787,.717],[.890,.651]],
-  solar:[[.790,.278],[.819,.292]],
-  diesel:[[.152,.348],[.286,.427],[.432,.502]],
-  oil:[[.733,.749]],
-  sentry:[[.227,.510]],
-  turret:[[.500,.121]],
-  bunker:[[.179,.477],[.491,.595]],
-  laser:[[.292,.238]],
-  recreation:[[.256,.503],[.410,.574]],
-  training:[[.859,.369]],
+  yard:[[.34,.61],[.43,.62],[.94,.13]],
+  factory:[[.31,.57],[.44,.61],[.57,.64]],
+  repairDepot:[[.72,.49],[.66,.53]],
+  refinery:[[.48,.55],[.86,.68]],
+  barracks:[[.32,.34],[.50,.36],[.72,.40]],
+  airport:[[.79,.16],[.06,.91],[.13,.82],[.21,.73],[.56,.92],[.61,.83],[.66,.74]],
+  solar:[[.65,.25]],
+  diesel:[[.40,.72],[.53,.73],[.65,.71]],
+  oil:[[.82,.65]],
+  sentry:[[.46,.35]],
+  turret:[[.42,.07]],
+  bunker:[[.57,.50]],
+  laser:[LASER_ART.emitter],
+  recreation:[[.42,.66],[.62,.72]],
+  training:[[.51,.80]],
 };
+const buildingStacks={diesel:[[.16,.056],[.25,.023]],refinery:[[.18,.018],[.27,.067]]};
 const buildingEffectSprites=new Map();
 
 function drawBuildingGlow(context,color,x,y,rx,ry,intensity) {
@@ -2248,8 +2249,8 @@ function drawBuildingActivity(context,building,art) {
 
   if (type==='oil' || type==='diesel') {
     const oil=type==='oil';
-    const x=art.left+art.width*(oil?.567:.269);
-    const y=art.top+art.height*(oil?.593:.536);
+    const x=art.left+art.width*(oil?.47:.54);
+    const y=art.top+art.height*(oil?.52:.74);
     const radius=oil?5:4;
     context.beginPath();
     for (let i=0;i<3;i++) {
@@ -2262,9 +2263,9 @@ function drawBuildingActivity(context,building,art) {
     context.stroke();
   }
 
-  if ((type==='diesel' || type==='refinery') && building.health>buildingSpec(type).health*.70) {
+  const stacks=buildingStacks[type];
+  if (stacks && building.health>buildingSpec(type).health*.70) {
     const diesel=type==='diesel';
-    const stacks=diesel?[[.227,.035],[.365,.109]]:[[.234,.072],[.348,.025]];
     for (const [index,[sx,sy]] of stacks.entries()) {
       const x=art.left+art.width*sx,y=art.top+art.height*sy;
       for (let i=0;i<4;i++) {
@@ -2282,12 +2283,6 @@ function drawStructure(context,structure,art) {
   if (image?.naturalWidth) {
     if (progress>=1) {
       context.drawImage(image,left,top,drawWidth,drawHeight);
-      if (structure.type==='repairDepot') {
-        const x=left+drawWidth*.53,y=top+drawHeight*.79;
-        context.fillStyle='#d1d8a1';
-        context.fillRect(x-5,y-1.5,10,3);
-        context.fillRect(x-1.5,y-5,3,10);
-      }
       drawBuildingActivity(context,structure,art);
       return;
     }
@@ -2422,15 +2417,8 @@ function drawBuildingDamage(context,building) {
 }
 
 function buildingLabelPoint(building) {
-  if (building.remaining>0) {
-    const art=structureArt(building);
-    return {x:art.left+art.width/2,y:art.top-10};
-  }
-  if (building.type==='refinery' && building.remaining===0) {
-    return project(building.x+.55,building.y+.21,125);
-  }
-  const height=buildingSpec(building.type).roof+10;
-  return project(building.x+(building.width-1)*.5,building.y+.15,height);
+  const art=structureArt(building);
+  return {x:art.left+art.width/2,y:art.top-10};
 }
 
 function buildingCaption(building) {
@@ -2624,21 +2612,24 @@ function drawWorld() {
       }});
       else if (kind==='rock' || (kind==='hill' && seed>.91)) {
         objects.push({depth:x+y+.04,fade,draw:()=> {
-          if (sprite(ctx,kind==='hill'?'coast-cliff':'coast-stone',p.x,p.y+8,57+seed*19,seed>.5)) return;
-          if (sprite(ctx,'stone',p.x,p.y+8,60+seed*19,seed>.5)) return;
+          const karst=kind==='rock' && seed>.80;
+          if (sprite(ctx,karst?'karst':'limestone',p.x,p.y+8,
+            karst?54+seed*16:kind==='hill'?26+seed*8:57+seed*19,seed>.5)) return;
           stone(ctx,{x:p.x-14,y:p.y+1},1.07,seed>.54);
           stone(ctx,{x:p.x+8,y:p.y-4},1.19,seed>.64);
           stone(ctx,{x:p.x+18,y:p.y+4},.47,true);
         }});
       } else if (forestAt(x,y,kind)) {
         objects.push({depth:x+y+.13,fade,draw:()=> {
-          if (sprite(ctx,seed>.55?'coast-palm':'coast-fan',p.x+seed*10-5,p.y+7,43+seed*29,seed>.5)) return;
-          if (sprite(ctx,'forest',p.x+seed*10-5,p.y+7,48+seed*33,seed>.5)) return;
+          const bamboo=seed>.74;
+          if (sprite(ctx,bamboo?'bamboo':'pine',p.x+seed*10-5,p.y+7,
+            bamboo?36+seed*14:55+seed*22,seed>.86)) return;
           pine(ctx,{x:p.x-8,y:p.y+1},.67+seed*.23,seed>.8);
           if (seed>.78) pine(ctx,{x:p.x+12,y:p.y+5},.59,seed>.91);
         }});
-      } else if (kind==='bank' && seed>.91 && !onStructure(x,y)) {
-        objects.push({depth:x+y+.08,fade,draw:()=>sprite(ctx,'coast-fan',p.x,p.y+5,37+seed*12,seed>.95)});
+      } else if (kind==='bank' && seed>.85 && !onStructure(x,y)) {
+        objects.push({depth:x+y+.08,fade,draw:()=>
+          sprite(ctx,seed>.95?'river-stones':'reeds',p.x,p.y+5,32+seed*14,seed>.92)});
       } else if (!groundTexture && ['field','meadow','bank','scrub'].includes(kind) && seed>.46) {
         if (seed>.93 && kind!=='meadow') objects.push({depth:x+y,fade,draw:()=>stone(ctx,p,.40,true)});
         else {
@@ -2722,7 +2713,7 @@ function drawWorld() {
     const label=pending?name+' '+progress+'%':name;
     tagLabel(ctx,p,label,hostile?'#ef987a':pending?'#e7c17d':
       building.team==='neutral'?'#e7c17d':
-        (building===game.selectedBuilding || building.type==='oil')?'#c3eca1':'#bdbfa2');
+        (building===game.selectedBuilding || building.type==='oil')?'#c3eca1':'#aed4ec');
   }
   for (const hill of battlefield.hills) {
     if (visible(hill.x,hill.y)) tagLabel(ctx,projectGround(hill.x,hill.y,15),'山丘','#c7bd98');
@@ -5371,7 +5362,8 @@ function fireWeapon(attacker,from,weapon,target,hits) {
     projectGround(originX,originY,weapon.height);
   if (effect==='laser') {
     const art=structureArt(attacker);
-    origin={x:art.left+art.width*.68,y:art.top+art.height*.245};
+    const [x,y]=LASER_ART.emitter;
+    origin={x:art.left+x*art.width,y:art.top+y*art.height};
   }
   const height=target.width ? Math.min(32,buildingSpec(target.type).body*.62) :
     (WEAPONS[target.type]?.height??UNIT_ART[target.type].hitHeight*.72)*.70;

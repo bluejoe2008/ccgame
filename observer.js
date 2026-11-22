@@ -335,7 +335,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=battle-effects';
+  script.src = 'game.js?v=jiangnan';
   document.head.append(script);
 }
 bootObserver();
