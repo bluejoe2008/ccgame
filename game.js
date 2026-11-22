@@ -221,7 +221,7 @@ const radarViewport = {w: 0, h: 0, dpr: 1};
 const radarTerrain=ENGINE_ONLY?null:document.createElement('canvas');
 let radarTerrainCache=null;
 const game = {
-  selection:[], selectedBuilding:null, hoverTarget:null, time:0,
+  selection:[], selectedBuilding:null, hoverTarget:null, placement:null, time:0,
   perspective:'player', outcome:null,
   get selected() { return this.selection.length===1 ? this.selection[0] : null; },
   follow:null, notice:'', noticeUntil:0, radarLayout:null, firstEngagement:false,
@@ -230,6 +230,7 @@ const pressed = new Set();
 const touches = new Map();
 let mouseDrag = null;
 let selectionDrag = null;
+let mapPointer = null;
 let lastFrame = 0;
 let nextRadar = 0;
 let nextHud = 0;
@@ -904,7 +905,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=construction-sites');
+      const worker=new Worker('terrain-worker.js?v=human-match');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2582,6 +2583,12 @@ function drawWorld() {
     if (readyConstructionSite(selectedBuilding,game.perspective)) drawRange(center,BUILD_RADIUS);
     if (weapon) drawRange(center,weapon.range,weapon);
   }
+  const placement=game.placement;
+  if (placement?.tile) {
+    const {left,top,right,bottom}=placementBounds({...buildingSpec(placement.type),...placement.tile,type:placement.type});
+    polygon(ctx,[project(left,top),project(right,top),project(right,bottom),project(left,bottom)],
+      placement.valid?'#a6df6c46':'#e0715c49',placement.valid?'#c2ec95':'#f29b87',2);
+  }
   const selectedUnit=game.selected;
   const weapon=WEAPONS[selectedUnit?.type];
   if (weapon) drawRange(selectedUnit,weapon.range,weapon);
@@ -3037,8 +3044,9 @@ function select(selection,building=null) {
   game.selection=selection;
   game.selectedBuilding=building;
   game.hoverTarget=null;
+  if (changed) game.placement=null;
   game.notice='';
-  game.follow=game.selected;
+  game.follow=!ENGINE_ONLY && playerCanCommand()?null:game.selected;
   syncHud();
 }
 
@@ -4156,19 +4164,12 @@ function rallyTileAvailable(tile) {
 }
 
 function setRallyPoint(building,tile) {
-  if (!visible(tile.x,tile.y) || !rallyTileAvailable(tile)) {
-    notice('请选择可通行的空地作为集结点');
-    return;
-  }
+  if (!FACTIONS[building.team].explored.has(tileKey(tile.x,tile.y)) || !rallyTileAvailable(tile)) return false;
   const exit=spawnPoint(building,false);
-  if (!exit || !findPath(tile,exit)) {
-    notice('建筑出口无法通往该集结点');
-    return;
-  }
+  if (!exit || !findPath(tile,exit)) return false;
   building.rally={x:tile.x,y:tile.y};
-  sound.play('move');
-  notice(buildingSpec(building.type).label+'集结点已设置');
-  syncBuildMenu();
+  playAt('move',yardCenter(building),building);
+  return true;
 }
 
 function sendToRally(unit,building) {
@@ -5322,6 +5323,13 @@ function advanceFaction(faction) {
   faction.nextOrder=game.time+.55;
   const buildings=structures.filter(building=>building.team===team && building.health>0);
   const members=units.filter(unit=>unit.team===team && unit.health>0);
+  if (team==='player' && globalThis.matchEngine?.humanControlled) {
+    refreshVision(faction,members,buildings);
+    dispatchTankRepairs(faction,buildings.filter(building=>building.type==='repairDepot'),
+      members.filter(unit=>REPAIR_TANKS.has(unit.type)));
+    advanceMounts(faction,members.filter(unit=>unit.goal?.kind==='mount' || (!unit.goal && !unit.attackTarget) || unit.type==='horse'));
+    return;
+  }
   const yards=buildings.filter(building=>building.type==='yard');
   const yard=yards[0];
   deployBaseVehicles(faction,members,yards);
@@ -5532,6 +5540,98 @@ function clearAttackOrder(unit) {
   unit.route=[];
   unit.goal=null;
   unit.mode='idle';
+}
+
+function orderPlayerMovement(members,tile) {
+  const pending=new Set(members.sort((a,b)=>distanceTo(a,tile)-distanceTo(b,tile)));
+  const mine=amountAt(tile.x,tile.y)>0;
+  let ordered=0;
+  for (const unit of pending) {
+    pending.delete(unit);
+    if (unit.type==='bomber') continue;
+    if (isAirborne(unit)) {
+      const drop=unit.type==='helicopter' && unit.passengers.length>0;
+      setFlightCourse(unit,tile,drop?'drop':unit.type==='reconPlane'?'scout':'move');
+      unit.mode=drop?'transporting':'moving';
+      ordered++;
+      continue;
+    }
+    const kind=unit.type==='miner' && mine?'mine':'move';
+    if (!setCourse(tile,kind,unit)) continue;
+    ordered++;
+    if (kind!=='move' || unit.type==='miner') continue;
+    const followers=formMarchGroup(unit,[...pending].filter(member=>member.type!=='miner' &&
+      !member.attackTarget && !member.captureTarget));
+    for (const follower of followers) pending.delete(follower);
+    ordered+=followers.length;
+  }
+  return ordered;
+}
+
+function executePlayerOrder(order,resolve) {
+  const faction=FACTIONS.player;
+  const success=(ordered=1)=>({ordered});
+  const fail=error=>({error});
+  const own=entity=>entity?.team===faction.team && entity.health>0;
+  const ready=building=>own(building) && building?.width && building.remaining===0;
+  const selected=resolve(order.source);
+  if (order.kind==='deploy') {
+    if (!own(selected) || selected.type!=='mcv') return fail('unavailable');
+    if (!deployYard(selected)) return fail('placement');
+    log('蓝方基地车开始部署。',faction.team);
+    return success();
+  }
+  if (order.kind==='produce' || order.kind==='research') {
+    if (!ready(selected)) return fail('unavailable');
+    if (order.kind==='research') {
+      if (selected.type!=='yard') return fail('unavailable');
+      const {research,manufacturing}=faction;
+      planResearch(faction,selected);
+      return research!==faction.research || manufacturing!==faction.manufacturing ? success() : fail('research');
+    }
+    if (typeof order.type!=='string' || !Object.hasOwn(PRODUCTS,order.type)) return fail('invalid');
+    if (!enqueue(selected,order.type)) return fail(faction.credits<PRODUCTS[order.type].cost?'credits':'unavailable');
+    return success();
+  }
+  if (order.kind==='build' || order.kind==='move' || order.kind==='rally') {
+    const {x,y}=order;
+    if (!Number.isSafeInteger(x) || !Number.isSafeInteger(y) || !onMap(x,y)) return fail('invalid');
+    if (order.kind==='build') {
+      if (typeof order.type!=='string' || !Object.hasOwn(BUILDINGS,order.type)) return fail('invalid');
+      const spec=BUILDINGS[order.type];
+      if (!ready(selected)) return fail('unavailable');
+      if (faction.credits<spec.cost) return fail('credits');
+      const tile=order.type==='wall'?{x,y,axis:order.axis==='y'?'y':'x'}:{x,y};
+      const building=beginConstruction(order.type,tile,faction.team);
+      if (!building) return fail('placement');
+      log('蓝方'+spec.label+'开始施工。',faction.team);
+      playAt('build',yardCenter(building),building);
+      return success();
+    }
+    if (!faction.explored.has(tileKey(x,y))) return fail('unexplored');
+    if (order.kind==='rally') return ready(selected) && supportsRally(selected) && setRallyPoint(selected,{x,y})
+      ? success() : fail('route');
+  }
+  if (order.kind!=='move' && order.kind!=='target' || !Array.isArray(order.units)) return fail('invalid');
+  const members=[...new Set(order.units.map(resolve))].filter(unit=>own(unit) && !unit.width &&
+    !unit.serviceDepot && unit.mode!=='crashing');
+  if (!members.length) return fail('unavailable');
+  if (order.kind==='move') {
+    const ordered=orderPlayerMovement(members,{x:order.x,y:order.y});
+    return ordered?success(ordered):fail('route');
+  }
+  const target=resolve(order.target);
+  if (!target || target.health<=0 || !canSeeEntity(faction,target)) return fail('unavailable');
+  if (own(target)) {
+    if (target.type!=='helicopter') return fail('unavailable');
+    const ordered=members.filter(unit=>unit!==target && boardTransport(target,unit)).length;
+    return ordered?success(ordered):fail('transport');
+  }
+  const engineer=target.width && members.find(unit=>unit.type==='engineer');
+  if (engineer && orderCapture(engineer,target)) return success();
+  if (target.team==='neutral') return fail('capture');
+  const ordered=orderAttack(members,target);
+  return ordered?success(ordered):fail(engineer?'capture':'unavailable');
 }
 
 function advanceAttackOrders(fighters) {
@@ -6046,6 +6146,31 @@ function weaponRangeLabel(weapon) {
   return (weapon.minimum?weapon.minimum+'–':'')+weapon.range+' 格';
 }
 
+function syncPlayerBuildingControls(building) {
+  const controls=byId('building-controls');
+  controls.hidden=!playerCanCommand() || !readyConstructionSite(building,'player');
+  if (controls.hidden) return;
+  const faction=FACTIONS.player;
+  const construction=byId('construction-type');
+  for (const option of construction.options) {
+    option.disabled=faction.credits<BUILDINGS[option.value==='wall-y'?'wall':option.value].cost;
+  }
+  byId('place-building').disabled=Boolean(construction.selectedOptions[0]?.disabled);
+  const products=byId('production-type');
+  if (products.dataset.source!==building.type) {
+    products.dataset.source=building.type;
+    products.replaceChildren(...Object.entries(PRODUCTS).filter(([type,spec])=>type!=='fighter' && spec.building===building.type)
+      .map(([type,spec])=>new Option(spec.label+' · '+spec.cost,type)));
+  }
+  for (const option of products.options) {
+    const spec=PRODUCTS[option.value];
+    option.disabled=faction.credits<spec.cost || Boolean(spec.tech && !faction.discoveries.has(spec.tech));
+  }
+  byId('production-control').hidden=!products.options.length;
+  byId('produce-unit').disabled=!products.value || Boolean(products.selectedOptions[0]?.disabled);
+  byId('research-tech').hidden=building.type!=='yard';
+}
+
 function syncBuildMenu() {
   const building=game.selectedBuilding;
   buildingMenu.hidden=!building;
@@ -6107,7 +6232,66 @@ function syncBuildMenu() {
     repairStatus=building.repair.waiting?' · 等待维修资金':' · 自动维修中';
   }
   byId('repair-status').textContent='耐久 '+Math.ceil(building.health)+' / '+spec.health+repairStatus;
+  syncPlayerBuildingControls(building);
   positionBuildingMenu(building);
+}
+
+function deployCandidate() {
+  if (!playerCanCommand() || game.placement) return null;
+  const unit=[game.hoverTarget,game.selected].find(target=>target?.type==='mcv' &&
+    target.team==='player' && target.health>0 && units.includes(target));
+  return unit??null;
+}
+
+function syncPlayerPointer() {
+  const deploy=byId('deploy-base');
+  const candidate=deployCandidate();
+  deploy.hidden=!candidate;
+  if (candidate) {
+    const center=project(camera.x,camera.y);
+    const point=project(candidate.x,candidate.y,UNIT_ART.mcv.hitHeight);
+    const x=viewport.w/2+(point.x-center.x)*viewport.scale+9;
+    const y=viewport.h/2+(point.y-center.y)*viewport.scale-8;
+    deploy.hidden=x<0 || x>viewport.w-60 || y<0 || y>viewport.h-35;
+    deploy.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
+  }
+  const reticle=byId('target-cursor');
+  const targeting=Boolean(mapPointer && !selectionDrag?.active && !mouseDrag?.active && !game.placement &&
+    playerCanCommand() && game.selection.some(unit=>unit.team==='player' && unit.health>0 && WEAPONS[unit.type]));
+  map.classList.toggle('targeting',targeting);
+  reticle.hidden=!targeting;
+  if (targeting) {
+    reticle.dataset.hostile=String(game.hoverTarget?.team==='enemy');
+    reticle.style.transform='translate('+(mapPointer.x-15)+'px,'+(mapPointer.y-15)+'px)';
+  }
+}
+
+function attachPlayerControls() {
+  const construction=byId('construction-type');
+  for (const [type,spec] of Object.entries(BUILDINGS)) {
+    construction.add(new Option(spec.label+' · '+spec.cost,type));
+    if (type==='wall') construction.add(new Option('城墙（另一方向） · '+spec.cost,'wall-y'));
+  }
+  for (const id of ['construction-type','production-type']) byId(id).addEventListener('change',syncBuildMenu);
+  byId('deploy-base').addEventListener('click',()=>{
+    const unit=deployCandidate();
+    if (unit) void sendPlayerOrder({kind:'deploy',source:unit.viewId},'基地车开始部署。');
+  });
+  byId('place-building').addEventListener('click',()=>{
+    if (!playerCanCommand() || !game.selectedBuilding) return;
+    const choice=construction.value;
+    game.placement={source:game.selectedBuilding.viewId,type:choice==='wall-y'?'wall':choice,axis:choice==='wall-y'?'y':'x'};
+    notice('点击地图放置'+BUILDINGS[game.placement.type].label+'，右键取消。');
+  });
+  byId('produce-unit').addEventListener('click',()=>{
+    const type=byId('production-type').value;
+    if (game.selectedBuilding && PRODUCTS[type]) {
+      void sendPlayerOrder({kind:'produce',source:game.selectedBuilding.viewId,type},PRODUCTS[type].label+'已加入生产队列。');
+    }
+  });
+  byId('research-tech').addEventListener('click',()=>{
+    if (game.selectedBuilding) void sendPlayerOrder({kind:'research',source:game.selectedBuilding.viewId},'科技项目已启动。');
+  });
 }
 
 function syncResearchHud() {
@@ -6115,14 +6299,15 @@ function syncResearchHud() {
     const key=factionTint(faction.team);
     byId(key+'-research').parentElement.hidden=faction.team!==game.perspective;
     if (faction.team!==game.perspective) continue;
-    const lines=[faction.strategy==='conservative'?'保守型':'进取型'];
+    const human=faction.team==='player' && observedMatch?.mode==='human';
+    const lines=[human?'玩家指挥':faction.strategy==='conservative'?'保守型':'进取型'];
     if (faction.experience?.sample) {
       const {sample,wins,losses,draws,focus}=faction.experience;
       lines.push('复盘最近 '+sample+' 局 · '+wins+' 胜 '+losses+' 负 '+draws+' 平');
       if (focus.length) lines.push('本局重点：'+focus.map(task=>COMMAND_TASKS[task].label).join('、'));
     }
     const plan=faction.commander.plan;
-    lines.push((plan?commandLabel(plan):faction.orders.mode==='guard'?'紧急回援':'部署基地')+
+    if (!human) lines.push((plan?commandLabel(plan):faction.orders.mode==='guard'?'紧急回援':'部署基地')+
       (faction.orders.source==='Codex'?'（Codex）':'（本地智能体）'));
     if (plan?.followup) lines.push('后续：'+commandLabel(plan.followup));
     if (plan?.homeReserve) lines.push('基地留守 '+plan.homeReserve+' 个作战单位');
@@ -6227,11 +6412,12 @@ function syncHud() {
   if (unit) focus.setAttribute('aria-pressed',String(Boolean(game.follow)));
   else focus.removeAttribute('aria-pressed');
   focus.title=(game.follow?'停止跟踪':focusLabel)+'（F）';
-  const hint=factionName(game.perspective)+'视角 · 拖动地图或点击小地图';
+  const hint=playerCanCommand()?'左键选择或下令 · 右键取消':factionName(game.perspective)+'视角 · 拖动地图或点击小地图';
   byId('instruction').textContent=(game.noticeUntil>game.time && game.notice) ||
     (game.follow?'跟踪中 · '+factionName(game.follow.team)+game.follow.label:hint);
   syncResearchHud();
   syncBuildMenu();
+  syncPlayerPointer();
 }
 
 function syncUnitStats(unit) {
@@ -6373,6 +6559,31 @@ function mapEntityAt({x,y}) {
 
 function mapClick(point) {
   const target=mapEntityAt(point);
+  if (playerCanCommand()) {
+    const world=worldAt(point.x,point.y);
+    const tile={x:Math.round(world.x),y:Math.round(world.y)};
+    const placement=game.placement;
+    if (placement) {
+      const {source,type,axis}=placement;
+      void sendPlayerOrder({kind:'build',source,type,axis,...tile},BUILDINGS[type].label+'开始施工。').then(ok=>{
+        if (ok && game.placement===placement) game.placement=null;
+      });
+      return;
+    }
+    const selected=game.selection.filter(unit=>unit.team==='player');
+    if (selected.length && !target) {
+      void sendPlayerOrder({kind:'move',units:selected.map(unit=>unit.viewId),...tile},'已下达移动指令。');
+      return;
+    }
+    if (selected.length && (target.team!=='player' || target.type==='helicopter' && !selected.includes(target))) {
+      void sendPlayerOrder({kind:'target',units:selected.map(unit=>unit.viewId),target:target.viewId},'已下达目标指令。');
+      return;
+    }
+    if (!target && game.selectedBuilding && supportsRally(game.selectedBuilding)) {
+      void sendPlayerOrder({kind:'rally',source:game.selectedBuilding.viewId,...tile},'集结点已设置。');
+      return;
+    }
+  }
   if (target?.width) select([],target);
   else selectUnit(target);
 }
@@ -6389,6 +6600,7 @@ function selectBox(drag) {
   const center=project(camera.x,camera.y);
   select(units.filter(unit=>{
     if (!canSeeEntity(viewFaction(),unit)) return false;
+    if (playerCanCommand() && unit.team!=='player') return false;
     const point=project(unit.x,unit.y,UNIT_ART[unit.type].hitHeight*.44+unitElevation(unit));
     const x=viewport.w/2+(point.x-center.x)*viewport.scale;
     const y=viewport.h/2+(point.y-center.y)*viewport.scale;
@@ -6405,7 +6617,7 @@ map.addEventListener('pointerdown',event=>{
     map.setPointerCapture(event.pointerId);
     return;
   }
-  if (event.button===0 && event.shiftKey) {
+  if (event.button===0 && (event.shiftKey || playerCanCommand())) {
     selectionDrag={pointerId:event.pointerId,start:p,end:p,active:false};
   } else if (event.button===0 || event.button===1) {
     event.preventDefault();
@@ -6433,6 +6645,7 @@ map.addEventListener('pointermove',event=>{
     if (mouseDrag.active) {
       map.style.cursor='grabbing';
       game.hoverTarget=null;
+      mapPointer=null;
       pan(previous.x-p.x,previous.y-p.y);
       mouseDrag.previous=p;
     }
@@ -6445,13 +6658,26 @@ map.addEventListener('pointermove',event=>{
     if (selectionDrag.active) {
       game.follow=null;
       game.hoverTarget=null;
+      mapPointer=null;
       map.style.cursor='crosshair';
       return;
     }
   }
   const entity=mapEntityAt(p);
   game.hoverTarget=entity;
-  map.style.cursor=entity?'pointer':'grab';
+  mapPointer=p;
+  const placement=game.placement;
+  if (placement) {
+    const world=worldAt(p.x,p.y);
+    const tile={x:Math.round(world.x),y:Math.round(world.y)};
+    if (!sameTile(placement.tile,tile)) {
+      const {width,height}=BUILDINGS[placement.type];
+      placement.tile=tile;
+      placement.valid=canPlace({...tile,type:placement.type,team:'player',width,height,axis:placement.axis});
+    }
+  }
+  map.style.cursor=placement?'crosshair':entity?'pointer':'grab';
+  syncPlayerPointer();
 });
 
 map.addEventListener('pointerup',event=>{
@@ -6473,6 +6699,8 @@ map.addEventListener('pointerup',event=>{
   selectionDrag=null;
   if (drag?.active) selectBox(drag);
   else if (p.x>=0 && p.x<=viewport.w && p.y>=0 && p.y<=viewport.h) mapClick(p);
+  if (p.x>=0 && p.x<=viewport.w && p.y>=0 && p.y<=viewport.h) mapPointer=p;
+  syncPlayerPointer();
 });
 map.addEventListener('pointercancel',event=>{
   touches.delete(event.pointerId);
@@ -6486,10 +6714,15 @@ map.addEventListener('lostpointercapture',event=>{
     map.style.cursor='grab';
   }
 });
-map.addEventListener('pointerleave',()=>{ game.hoverTarget=null; });
+map.addEventListener('pointerleave',event=>{
+  if (!byId('deploy-base').contains(event.relatedTarget)) game.hoverTarget=null;
+  mapPointer=null;
+  syncPlayerPointer();
+});
 view.addEventListener('contextmenu',event=>{
   event.preventDefault();
   selectionDrag=null;
+  game.placement=null;
   if (game.selection.length || game.selectedBuilding) sound.play('cancel');
   selectUnit(null);
 });
@@ -6614,11 +6847,10 @@ function frame(timestamp) {
   const dy=(Number(pressed.has('ArrowDown'))-Number(pressed.has('ArrowUp')))*speed;
   if (dx || dy) pan(dx,dy);
   const selectable=unit=>unit.health>0 && units.includes(unit) && canSeeEntity(viewFaction(),unit);
-  if (game.selection.some(unit=>!selectable(unit)) ||
-      (game.selectedBuilding && !structureVisible(game.selectedBuilding))) {
-    const building=game.selectedBuilding;
-    select(game.selection.filter(selectable),
-      building && structureVisible(building)?building:null);
+  const building=game.selectedBuilding;
+  const visibleBuilding=building && structures.includes(building) && structureVisible(building);
+  if (game.selection.some(unit=>!selectable(unit)) || (building && !visibleBuilding)) {
+    select(game.selection.filter(selectable),visibleBuilding?building:null);
   }
   if (game.follow) {
     const ease=reducedMotion.matches?1:1-Math.exp(-dt*5.5);
@@ -6645,6 +6877,7 @@ refreshVision(FACTIONS.enemy,[enemyMcv],[]);
 if (!ENGINE_ONLY) {
   sizeCanvas(map,viewport,MAX_VIEWPORT_PIXELS);
   sizeCanvas(radar,radarViewport);
+  attachPlayerControls();
   attachObserver(globalThis.matchBootstrap);
   requestAnimationFrame(frame);
 }

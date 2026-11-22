@@ -5,6 +5,7 @@ let lastLog = 0;
 let lastSound = null;
 let pendingControl = false;
 let pendingBuildingStyle = false;
+let pendingOrder = false;
 let observerConnected = true;
 let observationRequest = 0;
 let observationTimer;
@@ -46,21 +47,59 @@ function battleClock(seconds) {
   return String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
 }
 
+function playerCanCommand() {
+  return observedMatch?.mode==='human' && observedMatch.status==='running' &&
+    game.perspective==='player' && observerConnected;
+}
+
 function updateMatchControls() {
   const clock=battleClock(observedMatch?.time??0);
   const statuses = { idle:'等待开始', running:'进行中', ended:'已结束', finished:'已分胜负' };
   const number=observedMatch?.round?'第 '+observedMatch.round+' 局 · ':'';
   const running = observedMatch?.status === 'running';
-  const rollover=observedMatch?.status==='finished' && observedMatch.auto;
   const results={player:'蓝方获胜',enemy:'红方获胜',draw:'平局'};
   const winner=results[observedMatch?.outcome];
-  const seconds=rollover?Math.max(0,Math.ceil((observedMatch.nextRoundAt-Date.now())/1000)):0;
-  const status=rollover ? (winner??'已分胜负')+' · '+(seconds?seconds+' 秒后开始下一局':'准备下一局') :
-    (winner??statuses[observedMatch?.status]??'连接中')+' · '+clock;
+  const status=(winner??statuses[observedMatch?.status]??'连接中')+' · '+clock;
   byId('match-clock').textContent=number+(observerConnected?status:'重连中 · '+clock);
+  const human=observedMatch?.mode==='human' && running;
+  byId('map-heading').textContent=human?'玩家蓝方 / 智能体红方':'观战';
+  byId('view-red').disabled=human;
+  byId('map-shortcuts').textContent=human?'左键下令或拖选 · 右键取消 · 中键拖地图':'拖动地图 · Shift 拖动框选';
   byId('start-session').disabled = running || !observerConnected || pendingControl;
-  byId('end-session').disabled = (!running && !rollover) || !observerConnected || pendingControl;
+  byId('end-session').disabled = !running || !observerConnected || pendingControl;
   updateBuildingStyleControls();
+}
+
+const orderErrors={
+  inactive:'当前没有可指挥的人机对局。', invalid:'请点击地图内的有效位置。', unavailable:'所选单位或目标无法执行该指令。',
+  placement:'这里无法建造。请选择范围内已探明的空地。', credits:'储备不足。', unexplored:'请先探索该区域。',
+  route:'无法到达目标位置。', capture:'工程师无法接近占领目标。', transport:'请让人员靠近已落地且有空位的直升机。',
+  research:'暂无可启动的项目，或储备不足。',
+};
+
+async function sendPlayerOrder(order,message) {
+  if (!playerCanCommand() || pendingOrder) return false;
+  const current=observedMatch.id;
+  pendingOrder=true;
+  try {
+    const response=await fetch('/api/match/order',{
+      method:'POST',headers:{'Content-Type':'application/json','X-Match-Id':current},
+      body:JSON.stringify(order),signal:AbortSignal.timeout(9000),
+    });
+    const result=await response.json();
+    if (!response.ok) {
+      notice(orderErrors[result.error]??'指令未能完成，请重试。');
+      return false;
+    }
+    notice(message);
+    await pollObservation();
+    return true;
+  } catch {
+    notice('连接中断，未能确认指令结果。');
+    return false;
+  } finally {
+    pendingOrder=false;
+  }
 }
 
 function updateBuildingStyleControls() {
@@ -282,6 +321,7 @@ function applyObservation(snapshot) {
   if (snapshot.team !== game.perspective) return;
   const outcomeChanged = game.outcome !== snapshot.outcome;
   observedMatch = snapshot;
+  if (snapshot.status!=='running') game.placement=null;
   game.time = snapshot.time;
   game.outcome = snapshot.outcome;
   game.firstEngagement = snapshot.firstEngagement;
@@ -405,7 +445,7 @@ function attachObserver(snapshot) {
     select.addEventListener('change',()=>chooseBuildingStyle(team,select.value));
   }
   applyObservation(snapshot);
-  byId('start-session').addEventListener('click',()=>controlMatch('start'));
+  byId('start-session').addEventListener('click',()=>controlMatch('start-human'));
   byId('end-session').addEventListener('click',()=>controlMatch('end'));
   byId('open-history').addEventListener('click',()=>openBattleHistory());
   byId('open-drills').addEventListener('click',()=>byId('training-drills').showModal());
@@ -433,7 +473,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=construction-sites';
+  script.src = 'game.js?v=human-match';
   document.head.append(script);
 }
 bootObserver();

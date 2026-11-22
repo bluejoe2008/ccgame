@@ -223,6 +223,35 @@ h1,h2 { margin: 0; }
 .building-menu > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
 .building-menu h3 { font-size: 13px; margin: 0; }
 .building-menu #close-building { min-width: 24px; min-height: 23px; padding: 0 3px; font-size: 16px; }
+.building-controls { display: grid; gap: 7px; margin-top: 8px; border-top: 1px solid #626a4f80; padding-top: 7px; }
+.building-control { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px; align-items: center; }
+.building-control label { grid-column: 1/-1; color: var(--muted); font-size: 10px; }
+.building-control select {
+  width: 100%; min-width: 0; height: 28px; padding: 2px 4px;
+  color: var(--text); background: #222c21; border: 1px solid #59684d; font-size: 11px;
+}
+.building-controls .metal-button { min-height: 28px; font-size: 11px; }
+#map.targeting { cursor: none !important; }
+.target-cursor {
+  position: absolute; z-index: 3; top: 0; left: 0; width: 30px; height: 30px;
+  pointer-events: none; color: #c9ec97;
+}
+.target-cursor[data-hostile="true"] { color: #ff8d76; }
+.target-cursor::before, .target-cursor::after, .target-cursor i { content: ""; position: absolute; }
+.target-cursor::before { inset: 4px; border: 1.5px dashed currentColor; border-radius: 50%; animation: target-pulse 1.1s ease-in-out infinite; }
+.target-cursor::after {
+  inset: 0; filter: drop-shadow(0 1px 2px #0d170b);
+  background: linear-gradient(currentColor,currentColor) top center / 1px 7px no-repeat,
+    linear-gradient(currentColor,currentColor) bottom center / 1px 7px no-repeat,
+    linear-gradient(currentColor,currentColor) left center / 7px 1px no-repeat,
+    linear-gradient(currentColor,currentColor) right center / 7px 1px no-repeat;
+}
+.target-cursor i { inset: 13px; border-radius: 50%; background: currentColor; }
+@keyframes target-pulse {
+  0%, 100% { transform: scale(.82) rotate(-15deg); opacity: .6; }
+  50% { transform: scale(1.08) rotate(22deg); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .target-cursor::before { animation: none; } }
 .building-actions {
   display: flex;
   align-items: center;

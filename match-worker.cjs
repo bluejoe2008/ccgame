@@ -12,7 +12,6 @@ const { BUILDING_THEMES, RANDOM_BUILDING_THEME, validBuildingThemePreference, re
 const { checkpointFile, plannerOrigin } = workerData;
 const version = 1;
 const step = .04;
-const roundDelay = 10000;
 fs.mkdirSync(path.dirname(checkpointFile), { recursive:true, mode:0o700 });
 const history = new BattleHistory(checkpointFile);
 const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
@@ -21,6 +20,7 @@ const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
 const interfaceScript = new vm.Script(`({
   game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites, battlefield, OIL_FIELD,
   shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, knowsBuilding, oreCapacity, amountAt, tileUnder, finalizeOilOperations,
+  executePlayerOrder,
   nextId() { return nextUnitId; },
   restore(saved) {
     for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
@@ -112,6 +112,7 @@ function initialise(description, saved = null) {
     matchEngine: {
       seed: match.seed,
       get buildingStyles() { return match.buildingStyles; },
+      get humanControlled() { return match.mode === 'human'; },
       planner: Boolean(plannerOrigin),
       log:addLog,
       sound(cue, point, source) {
@@ -145,7 +146,7 @@ function freshMatch(status, round, previousSeed = null, previousPreferences) {
     const preference=buildingStylePreferences[team];
     return [team,preference===RANDOM_BUILDING_THEME?availableThemes[randomInt(availableThemes.length)]:preference];
   }));
-  return { id:randomUUID(), seed, status, round, auto:true, buildingStyles, buildingStylePreferences,
+  return { id:randomUUID(), seed, status, round, mode:'human', auto:false, buildingStyles, buildingStylePreferences,
     startedAt:status==='running'?Date.now():null, finishedAt:null, nextRoundAt:null };
 }
 
@@ -200,13 +201,12 @@ function startRound() {
   const experience=history.experience();
   const round=match.round+Number(match.status!=='idle');
   initialise(freshMatch('running',round,match.seed,match.buildingStylePreferences));
-  addLog('第 '+round+' 局开始。双方开始部署与侦察。',null,0);
-  for (const [team,review] of Object.entries(experience)) {
-    engine.FACTIONS[team].experience=review;
-    if (!review.sample) continue;
-    const name=team==='player'?'蓝方':'红方';
-    addLog(name+'复习最近 '+review.sample+' 局（'+review.wins+' 胜 '+review.losses+' 负 '+review.draws+' 平）。本局重点：'+
-      review.focus.map(task=>labels[task]).join('、')+'。',team,0);
+  addLog('第 '+round+' 局开始。玩家指挥蓝方，红方由指挥智能体控制。',null,0);
+  const review=experience.enemy;
+  engine.FACTIONS.enemy.experience=review;
+  if (review.sample) {
+    addLog('红方复习最近 '+review.sample+' 局（'+review.wins+' 胜 '+review.losses+' 负 '+review.draws+' 平）。本局重点：'+
+      review.focus.map(task=>labels[task]).join('、')+'。','enemy',0);
   }
   startPending=!saveSafely();
 }
@@ -232,6 +232,7 @@ function matchInfo() {
 }
 
 function observation(team) {
+  if (match.mode==='human' && match.status==='running') team='player';
   const view = engine.FACTIONS[team];
   const seenUnits = engine.units.filter(unit => unit.health > 0 && engine.canSeeEntity(view, unit));
   const seenBuildings = engine.structures.filter(building => building.health > 0 && engine.canSeeEntity(view, building));
@@ -301,12 +302,10 @@ function tick() {
     return;
   }
   if (match.status !== 'running') {
-    if (match.status==='idle' && match.auto) startRound();
     if (['finished','ended'].includes(match.status) && !roundArchived && clock>=archiveRetryAt) {
       archiveRetryAt=clock+1000;
       archiveRound();
     }
-    if (match.status==='finished' && match.auto && roundArchived && Date.now()>=match.nextRoundAt) startRound();
     return;
   }
   pending += elapsed;
@@ -317,7 +316,6 @@ function tick() {
   if (engine.game.outcome) {
     match.status = 'finished';
     match.finishedAt=Date.now();
-    match.nextRoundAt=match.auto?match.finishedAt+roundDelay:null;
     const result={player:'蓝方获胜。',enemy:'红方获胜。',draw:'双方战成平局。'};
     addLog(result[engine.game.outcome],null,engine.game.time);
     archiveRound();
@@ -327,7 +325,7 @@ function tick() {
 }
 
 function command(request) {
-  if (['start','end'].includes(request.action) && request.current && request.current !== match.id) return matchInfo();
+  if (['start-human','end'].includes(request.action) && request.current && request.current !== match.id) return matchInfo();
   switch (request.action) {
     case 'status': return matchInfo();
     case 'snapshot': return observation(request.team);
@@ -350,7 +348,19 @@ function command(request) {
       const round=history.get(request.round);
       return round?history.logFile(round.id,request.team):null;
     }
-    case 'start':
+    case 'order': {
+      if (request.current!==match.id || match.mode!=='human' || match.status!=='running' || startPending) {
+        return {error:'inactive'};
+      }
+      const resolve=id=>{
+        if (typeof id!=='string') return null;
+        if (id.startsWith('u')) return engine.units.find(unit=>'u'+unit.id===id);
+        if (id.startsWith('b')) return engine.structures.find(building=>building.viewId===id);
+        return null;
+      };
+      return engine.executePlayerOrder(request.order,resolve);
+    }
+    case 'start-human':
       if (match.status !== 'running') startRound();
       return matchInfo();
     case 'end':
@@ -359,7 +369,7 @@ function command(request) {
       if (match.status === 'running') {
         match.status = 'ended';
         match.finishedAt=Date.now();
-        addLog('对局由观战者结束。',null,engine.game.time);
+        addLog(match.mode==='human'?'玩家结束了本局。':'对局由观战者结束。',null,engine.game.time);
         archiveRound();
       } else saveSafely();
       return matchInfo();
@@ -375,11 +385,12 @@ try {
   const saved = v8.deserialize(fs.readFileSync(checkpointFile));
   if (saved.version !== version) throw new Error('Unsupported checkpoint version');
   const match=saved.match;
+  match.mode??='ai';
   match.round??=history.latestRound()+1;
-  match.auto??=match.status!=='ended';
+  match.auto=false;
   match.startedAt??=null;
   match.finishedAt??=null;
-  match.nextRoundAt??=match.auto && match.status==='finished'?Date.now()+roundDelay:null;
+  match.nextRoundAt=null;
   match.buildingStyles=Object.fromEntries(factions.map(team=>[team,resolveBuildingTheme(match.buildingStyles?.[team])]));
   match.buildingStylePreferences=stylePreferences(match.buildingStylePreferences);
   initialise(match, saved);

@@ -164,12 +164,18 @@ async function serve(request,response) {
   }
   if (request.method==='POST') {
     if (!sameOrigin(request)) return send(403,{error:'origin'});
-    if (url.pathname==='/api/match/start' || url.pathname==='/api/match/end') {
+    if (url.pathname==='/api/match/start-human' || url.pathname==='/api/match/end') {
       if (Number(request.headers['content-length']??0)!==0 || request.headers['transfer-encoding']) {
         return send(400,{error:'unexpected_body'});
       }
       const action=url.pathname.split('/').pop();
       return send(200,await matchCall(action,{current:request.headers['x-match-id']}));
+    }
+    if (url.pathname==='/api/match/order') {
+      const order=await readJson(request);
+      if (!order || typeof order.kind!=='string') return send(400,{error:'invalid'});
+      const result=await matchCall('order',{order,current:request.headers['x-match-id']});
+      return send(result.error==='invalid'?400:result.error?409:200,result);
     }
     if (url.pathname==='/api/match/building-style') {
       const selection=await readJson(request);

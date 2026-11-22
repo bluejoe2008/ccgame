@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=building-themes">
+  <link rel="stylesheet" href="style.css?v=human-match">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=reconnaissance" defer></script>
   <script src="building-themes.js?v=4" defer></script>
-  <script src="observer.js?v=construction-sites" defer></script>
+  <script src="observer.js?v=human-match" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -43,9 +43,9 @@
     <section class="battlefield" aria-labelledby="map-heading">
       <div class="map-top">
         <div class="map-label">
-          <i aria-hidden="true"></i><h2 id="map-heading">共享对局</h2>
-          <button id="start-session" class="metal-button session-button" type="button" disabled>开始</button>
-          <button id="end-session" class="metal-button session-button" type="button" disabled>结束</button>
+          <i aria-hidden="true"></i><h2 id="map-heading">观战</h2>
+          <button id="start-session" class="metal-button session-button" type="button" disabled>人机对战</button>
+          <button id="end-session" class="metal-button session-button" type="button" disabled>结束本局</button>
           <span id="match-clock" class="match-clock" aria-label="对局进度">连接中</span>
         </div>
         <div class="map-top-actions">
@@ -83,6 +83,8 @@
       <div class="viewport" id="viewport">
         <canvas id="map-ground" aria-hidden="true"></canvas>
         <canvas id="map" aria-label="矿区战术地图，点击单位自动跟踪，拖动地图，按住 Shift 拖动框选" tabindex="0"></canvas>
+        <div id="target-cursor" class="target-cursor" aria-hidden="true" hidden><i></i></div>
+        <button id="deploy-base" class="deploy-button" type="button" hidden><span aria-hidden="true">↓</span>部署</button>
         <div class="map-shade" aria-hidden="true"></div>
         <div class="radar-frame"><canvas id="radar" aria-label="小地图，点击移动视野"></canvas><div class="radar-glass" aria-hidden="true"></div></div>
         <section id="unit-menu" class="map-menu unit-menu" aria-label="所选单位状态" hidden>
@@ -109,6 +111,19 @@
             <strong id="repair-status"></strong>
             <progress id="repair-bar" class="production-bar" max="100" value="0" aria-label="建筑耐久"></progress>
           </div>
+          <div id="building-controls" class="building-controls" hidden>
+            <div class="building-control">
+              <label for="construction-type">新建建筑</label>
+              <select id="construction-type"></select>
+              <button id="place-building" class="metal-button" type="button">选位置</button>
+            </div>
+            <div id="production-control" class="building-control" hidden>
+              <label for="production-type">生产单位</label>
+              <select id="production-type"></select>
+              <button id="produce-unit" class="metal-button" type="button">生产</button>
+            </div>
+            <button id="research-tech" class="metal-button" type="button" hidden>研发科技</button>
+          </div>
         </section>
         <div class="map-hud">
           <div class="intel">
@@ -129,7 +144,7 @@
         <span><i class="dot oil"></i> 油田</span>
         <span><i class="dot blue"></i> 建筑</span>
         <span><i class="dot red"></i> 红方单位</span>
-        <span class="footer-hint">拖动地图 · Shift 拖动框选</span>
+        <span id="map-shortcuts" class="footer-hint">拖动地图 · Shift 拖动框选</span>
       </div>
     </section>
   </main>
@@ -178,16 +193,17 @@
     <form method="dialog">
       <header><h2 id="help-heading">操作说明</h2><button type="submit" class="metal-button">关闭</button></header>
       <dl>
-        <div><dt>共享对局</dt><dd>分出胜负后，服务器归档战报并自动开始下一局。「结束」停止连战并保留战况，「开始」恢复连战。刷新页面会回到当前对局。「战史」提供本方复盘和日志下载。</dd></div>
-        <div><dt>视野</dt><dd>拖动地图、按方向键或操作小地图可停止跟踪并移动视野。点击「蓝方」或「红方」切换阵营视角。本方探开的区域持续可见，区域内的单位和建筑会显示在地图上。被摧毁的油田会留下遗址标记。山丘会使地面单位上坡减速。</dd></div>
-        <div><dt>建造和收入</dt><dd>电脑自动部署基地车，也可在任一己方已启用的建筑周围施工。占领油田后可在附近建造，选择己方建筑可查看 10 格建造半径。双方基地附近是贫矿，中央富矿储量更大、开采更快。两类矿的再生储量都有限，近矿耗尽后，矿车会寻找已探明的远矿。满供电的油田每 15 秒提供 280 储备，首次占领奖励 260。建造、生产和修理消耗储备和时间，资金不足时会暂停维修。</dd></div>
+        <div><dt>人机对战</dt><dd>点击「人机对战」指挥蓝方，红方由指挥智能体控制。对局在服务器运行，刷新页面会回到当前进度。胜负确定或点击「结束本局」后，可手动开始下一局。</dd></div>
+        <div><dt>下达指令</dt><dd>左键选择单位，拖选多个单位，再左键指定目的地或敌方目标。右键取消选择。选中工程师后点击可见油田或敌方建筑可尝试占领。选中兵工厂或兵营后点击空地可设集结点。</dd></div>
+        <div><dt>视野</dt><dd>人机局中可用鼠标中键拖动、方向键和小地图移动视野，按 F 跟踪所选单位。已探开的区域持续可见，被摧毁的油田会留下遗址标记。观战时可切换红蓝方视角。</dd></div>
+        <div><dt>建造和收入</dt><dd>鼠标移到基地车上，点击旁边的「部署」。选中已启用的己方建筑后，选择建筑类型，再点击地图上的空地。包括已占领油田在内的己方建筑都提供 10 格建造半径。精炼厂会配发一辆自动采矿的矿车，油田满供电时每 15 秒提供 280 储备，首次占领奖励 260。</dd></div>
         <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>
         <div><dt>科技</dt><dd>双方可投入储备研发未知的攻击或经济科技。成果公开后可再花费资金制造超级武器或增收设备。点击「科技」查看进度。</dd></div>
         <div><dt>电力与生产</dt><dd>多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。电厂被摧毁后，供电不足会拖慢兵工厂和兵营的生产。</dd></div>
         <div><dt>空军</dt><dd>机场生产轰炸机、侦察机和运输直升机。轰炸机单次投弹后返航，侦察机负责探路，运输直升机最多搭载四名友方人员或军犬。固定翼飞机失去可用跑道后会迫降坠毁。</dd></div>
         <div><dt>坦克维修</dt><dd>修理厂每次接收一辆受损坦克。坦克会自行驶入维修区，维修消耗储备，完成后驶离修理厂。</dd></div>
         <div><dt>休闲与训练</dt><dd>棋牌室提高活动单位射速，训练操场提高活动单位伤害。供电不足会减弱加成。</dd></div>
-        <div><dt>指挥智能体</dt><dd>双方会在形成首批战斗部队后向已侦察的前沿推进，发现目标后主动交战。主力出击时会留下守军，基地遇袭会召回援军。点击「科技与指挥」查看当前阵营的计划。</dd></div>
+        <div><dt>指挥智能体</dt><dd>红方会根据侦察、资源与历局经验发展经济、组织进攻和回援。蓝方防御设施、军犬和矿车沿用各自的自动行为。结束本局后可切换视角查看红方行动记录。</dd></div>
         <div><dt>胜负</dt><dd>一方失去全部建筑和活动单位时，该方失败。双方同时失去全部单位时为平局。</dd></div>
       </dl>
     </form>
