@@ -2384,25 +2384,40 @@ class MinHeap {
 }
 
 const NEIGHBORS=[[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
+const DETOUR_NODES_PER_TICK=320;
+let detourNodesLeft=Infinity;
 
-function findPath(destination,unit,avoidUnits=false) {
+function findPath(destination,unit,avoidUnits=false,radius=8) {
   if (isAirborne(unit)) {
     if (!onMap(destination.x,destination.y) ||
         (avoidUnits && unitPathBlocked(unit,unit.x,unit.y,destination.x,destination.y))) return null;
     return distanceTo(unit,destination)<.04?[]:[{x:destination.x,y:destination.y}];
   }
   const here={x:Math.round(unit.x),y:Math.round(unit.y)};
-  if (!walkable(destination.x,destination.y) ||
-      (avoidUnits && unitPositionBlocked(unit,destination.x,destination.y,true))) return null;
+  const inside=(x,y)=>Math.abs(x-here.x)<=radius && Math.abs(y-here.y)<=radius;
+  if (avoidUnits && (!detourNodesLeft || !inside(destination.x,destination.y))) return null;
+  const obstacles=avoidUnits?units.filter(other=>other!==unit && other.health>0 &&
+    !isAirborne(other) && !canRunOver(unit,other) &&
+    Math.abs(other.x-here.x)<radius+1 && Math.abs(other.y-here.y)<radius+1):null;
+  const walkableCache=avoidUnits?new Map():null;
+  const open=(x,y)=>{
+    if (!walkableCache) return walkable(x,y);
+    if (!inside(x,y)) return false;
+    const key=tileKey(x,y);
+    if (!walkableCache.has(key)) walkableCache.set(key,walkable(x,y));
+    return walkableCache.get(key);
+  };
+  const occupied=(x,y)=>unitPositionBlocked(unit,x,y,true,obstacles);
+  const blocked=(x,y,nx,ny)=>blockingUnit(unit,x,y,nx,ny,obstacles);
+  if (!open(destination.x,destination.y) || (avoidUnits && occupied(destination.x,destination.y))) return null;
   const queue=new MinHeap();
   const frontier=new Map();
   let starts=[here];
-  if (avoidUnits && (!walkable(here.x,here.y) ||
-      unitPositionBlocked(unit,here.x,here.y,true) || unitPathBlocked(unit,unit.x,unit.y,here.x,here.y))) {
+  if (avoidUnits && (!open(here.x,here.y) || occupied(here.x,here.y) || blocked(unit.x,unit.y,here.x,here.y))) {
     starts=NEIGHBORS.filter(([dx,dy])=>!dx || !dy ||
-      (walkable(here.x+dx,here.y) && walkable(here.x,here.y+dy)))
+      (open(here.x+dx,here.y) && open(here.x,here.y+dy)))
       .map(([dx,dy])=>({x:here.x+dx,y:here.y+dy}))
-      .filter(tile=>walkable(tile.x,tile.y) && !unitPathBlocked(unit,unit.x,unit.y,tile.x,tile.y));
+      .filter(tile=>open(tile.x,tile.y) && !blocked(unit.x,unit.y,tile.x,tile.y));
   }
   for (const start of starts) {
     const key=tileKey(start.x,start.y);
@@ -2410,8 +2425,9 @@ function findPath(destination,unit,avoidUnits=false) {
     frontier.set(key,{...start,g,previous:null});
     queue.push({key,score:g+distanceTo(start,destination),g});
   }
-  let attempts=0;
-  while (queue.data.length && attempts++<16000) {
+  const nodeLimit=avoidUnits?(radius<=8?100:170):16000;
+  for (let visited=0;queue.data.length && visited<nodeLimit && (!avoidUnits || detourNodesLeft>0);visited++) {
+    if (avoidUnits) detourNodesLeft--;
     const current=queue.pop();
     const position=frontier.get(current.key);
     if (position.g!==current.g) continue;
@@ -2427,9 +2443,9 @@ function findPath(destination,unit,avoidUnits=false) {
     }
     for (const [dx,dy] of NEIGHBORS) {
       const x=position.x+dx,y=position.y+dy;
-      if (!walkable(x,y) || (dx && dy &&
-         (!walkable(position.x+dx,position.y) || !walkable(position.x,position.y+dy)))) continue;
-      if (avoidUnits && unitPathBlocked(unit,position.x,position.y,x,y)) continue;
+      if (!open(x,y) || (dx && dy &&
+         (!open(position.x+dx,position.y) || !open(position.x,position.y+dy)))) continue;
+      if (avoidUnits && blocked(position.x,position.y,x,y)) continue;
       const nextKey=tileKey(x,y);
       const effort=position.g+(dx&&dy ? Math.SQRT2 : 1)*(terrain(x,y)==='hill'?1.28:1);
       if (frontier.has(nextKey) && frontier.get(nextKey).g<=effort) continue;
@@ -2673,8 +2689,8 @@ function segmentDistanceSquared(x,y,dx,dy) {
   return (x-dx*along)**2+(y-dy*along)**2;
 }
 
-function unitPositionBlocked(unit,x,y,allowRunOver=false) {
-  return units.some(other=>other!==unit && !(other.health<=0) && isAirborne(unit)===isAirborne(other) &&
+function unitPositionBlocked(unit,x,y,allowRunOver=false,candidates=units) {
+  return candidates.some(other=>other!==unit && !(other.health<=0) && isAirborne(unit)===isAirborne(other) &&
     !(allowRunOver && canRunOver(unit,other)) &&
     Math.hypot(x-other.x,y-other.y)<UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type]);
 }
@@ -2683,10 +2699,10 @@ function unitPathBlocked(unit,fromX,fromY,toX,toY) {
   return Boolean(blockingUnit(unit,fromX,fromY,toX,toY));
 }
 
-function blockingUnit(unit,fromX,fromY,toX,toY) {
+function blockingUnit(unit,fromX,fromY,toX,toY,candidates=units) {
   const dx=toX-fromX, dy=toY-fromY;
   if (!dx && !dy) return null;
-  for (const other of units) {
+  for (const other of candidates) {
     if (other===unit || other.health<=0 || isAirborne(unit)!==isAirborne(other) || canRunOver(unit,other)) continue;
     const x=other.x-fromX, y=other.y-fromY;
     const radius=UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type];
@@ -2873,6 +2889,35 @@ function smoothCourse(unit,route,avoidUnits=false) {
   return path;
 }
 
+function localDetour(unit) {
+  const radius=(unit.detourFailures??0)>=2?12:7;
+  const anchors=new Map();
+  let previous=unit, distance=0;
+  for (const [index,point] of unit.route.entries()) {
+    distance+=distanceTo(previous,point);
+    if (distance>radius) break;
+    previous=point;
+    if (distance<1.5) continue;
+    const tile={x:Math.round(point.x),y:Math.round(point.y)};
+    const key=tileKey(tile.x,tile.y);
+    if (!walkable(tile.x,tile.y) || unitPositionBlocked(unit,tile.x,tile.y,true) ||
+        !groundPathOpen(tile.x,tile.y,point.x,point.y) ||
+        unitPathBlocked(unit,tile.x,tile.y,point.x,point.y)) continue;
+    anchors.set(key,{tile,index});
+  }
+  // Rejoin the existing route beyond the blockage and retain the original destination.
+  const exits=[...anchors.values()].reverse();
+  const candidates=exits.length>1?[exits[0],exits[Math.floor(exits.length/2)]]:exits;
+  for (const {tile,index} of candidates) {
+    if (!detourNodesLeft) break;
+    const path=findPath(tile,unit,true,radius);
+    if (!path?.length) continue;
+    const resume=index+Number(sameTile(tile,unit.route[index]));
+    return [...smoothCourse(unit,path,true),...unit.route.slice(resume)];
+  }
+  return null;
+}
+
 function recordTravel(unit,distance,dt,turn=0) {
   unit.travel=(unit.travel??0)+distance;
   const movement=distance>0 ? Math.min(1,distance/(dt*unit.speed)) : 0;
@@ -2960,11 +3005,18 @@ function navigate(unit,dt) {
     const blocker=blockingUnit(unit,fromX,fromY,nextX,nextY);
     if (blocker) {
       unit.velocity=0;
-      if (unit.goal && game.time>=(unit.nextDetour??0)) {
-        unit.nextDetour=game.time+.45;
+      if (unit.goal && detourNodesLeft && game.time>=(unit.nextDetour??0)) {
+        const stagger=((unit.id??0)%7)*.045;
+        unit.nextDetour=game.time+.48+stagger;
         if (!clearMinerLane(unit,blocker,node) && !(unit.type==='miner' && blocker.team===unit.team && blocker.goal?.kind==='yield')) {
-          const detour=findPath(unit.goal,unit,true);
-          if (detour?.length) unit.route=smoothCourse(unit,detour,true);
+          const detour=localDetour(unit);
+          if (detour) {
+            unit.route=detour;
+            unit.detourFailures=0;
+          } else if (detourNodesLeft) {
+            unit.detourFailures=Math.min(5,(unit.detourFailures??0)+1);
+            unit.nextDetour+=unit.detourFailures*.24;
+          }
         }
       }
       break;
@@ -2977,6 +3029,7 @@ function navigate(unit,dt) {
     if (step===1) unit.route.shift();
     if (radius) runOverInfantry(unit,fromX,fromY,radius);
   }
+  if (traveled>0) unit.detourFailures=0;
   recordTravel(unit,traveled,dt,turn);
   if (!unit.route.length) {
     unit.velocity=0;
@@ -5260,9 +5313,14 @@ responsive.observe(radar.parentElement);
 function stepSimulation(dt) {
   if (!game.outcome) {
     game.time+=dt;
-    for (const unit of [...units]) {
-      if (unit.type==='miner') advanceMiner(unit,dt);
-      else navigate(unit,dt);
+    detourNodesLeft=DETOUR_NODES_PER_TICK;
+    try {
+      for (const unit of [...units]) {
+        if (unit.type==='miner') advanceMiner(unit,dt);
+        else navigate(unit,dt);
+      }
+    } finally {
+      detourNodesLeft=Infinity;
     }
     advanceOre(dt);
     advanceProduction(dt);
