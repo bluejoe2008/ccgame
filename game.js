@@ -897,7 +897,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=command-dock');
+      const worker=new Worker('terrain-worker.js?v=map-exploration');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2895,7 +2895,7 @@ function pathTileOpen(buildings,x,y) {
   return !buildings[index] && groundPathCost(x,y,index)!==0;
 }
 
-function findPath(destination,unit,avoidUnits=false,radius=8) {
+function findPath(destination,unit,avoidUnits=false,radius=8,{nearest=false}={}) {
   if (isAirborne(unit)) {
     if (!onMap(destination.x,destination.y) ||
         (avoidUnits && unitPathBlocked(unit,unit.x,unit.y,destination.x,destination.y))) return null;
@@ -2907,7 +2907,7 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
   if (avoidUnits && (!detourNodesLeft || !inside(destination.x,destination.y))) return null;
   const buildings=pathBuildingGrid();
   const open=(x,y)=>(!avoidUnits || inside(x,y)) && pathTileOpen(buildings,x,y);
-  if (!open(destination.x,destination.y)) return null;
+  if (!nearest && !open(destination.x,destination.y)) return null;
   const obstacles=avoidUnits?units.filter(other=>other!==unit && other.health>0 &&
     !isAirborne(other) && collisionLayerMatches(unit,other) && !canRunOver(unit,other) &&
     Math.abs(other.x-here.x)<radius+1 && Math.abs(other.y-here.y)<radius+1)
@@ -2930,6 +2930,16 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
   if (avoidUnits && occupied(destination.x,destination.y)) return null;
   const queue=new MinHeap();
   const frontier=new Map();
+  const routeFrom=position=>{
+    const route=[];
+    let node=position;
+    while (node.previous!==null) {
+      route.push({x:node.x,y:node.y});
+      node=frontier.get(node.previous);
+    }
+    if (distanceTo(unit,node)>.04) route.push({x:node.x,y:node.y});
+    return route.reverse();
+  };
   let starts=[here];
   if (avoidUnits && (!open(here.x,here.y) || occupied(here.x,here.y) || blocked(unit.x,unit.y,here.x,here.y))) {
     starts=NEIGHBORS.filter(([dx,dy])=>!dx || !dy ||
@@ -2944,20 +2954,19 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
     queue.push({key,score:g+distanceTo(start,destination),g});
   }
   const nodeLimit=avoidUnits?(radius<=8?100:170):16000;
+  let closest=null,remainingDistance=Infinity;
   for (let visited=0;queue.data.length && visited<nodeLimit && (!avoidUnits || detourNodesLeft>0);visited++) {
     if (avoidUnits) detourNodesLeft--;
     const current=queue.pop();
     const position=frontier.get(current.key);
     if (position.g!==current.g) continue;
-    if (sameTile(position,destination)) {
-      const route=[];
-      let node=position;
-      while (node.previous!==null) {
-        route.push({x:node.x,y:node.y});
-        node=frontier.get(node.previous);
+    if (sameTile(position,destination) && open(position.x,position.y)) return routeFrom(position);
+    if (nearest && open(position.x,position.y)) {
+      const distance=distanceTo(position,destination);
+      if (distance<remainingDistance || (distance===remainingDistance && position.g<closest.g)) {
+        closest=position;
+        remainingDistance=distance;
       }
-      if (distanceTo(unit,node)>.04) route.push({x:node.x,y:node.y});
-      return route.reverse();
     }
     for (const [dx,dy] of NEIGHBORS) {
       const x=position.x+dx,y=position.y+dy;
@@ -2972,10 +2981,10 @@ function findPath(destination,unit,avoidUnits=false,radius=8) {
       queue.push({key:nextKey,g:effort,score:effort+Math.hypot(destination.x-x,destination.y-y)});
     }
   }
-  return null;
+  return closest?routeFrom(closest):null;
 }
 
-function findOreRoute(miner,minimum) {
+function findOreRoute(miner) {
   const faction=FACTIONS[miner.team];
   const depots=structures.filter(building=>refineryReady(building,miner.team)).map(dockFor);
   const threats=[...faction.reports.values()].filter(report=>game.time-report.time<16);
@@ -2989,17 +2998,23 @@ function findOreRoute(miner,minimum) {
   const space=Math.max(1,CARGO_LIMIT-(miner.cargo??0));
   const consider=(x,y)=>{
     const amount=amountAt(x,y);
-    if (amount<minimum || !walkable(x,y)) return;
+    if (amount<1 || !walkable(x,y)) return;
     const tile={x,y};
     const dockDistance=depots.length?Math.min(...depots.map(dock=>distanceTo(tile,dock))):0;
     const danger=threats.reduce((risk,report)=>risk+Math.max(0,7-distanceTo(tile,report))*.42,0);
     const rate=ORE_GRADES[seam(x,y)?.grade??'poor'].rate;
     const loadingCost=Math.min(amount,space)/rate*miner.speed+Math.max(0,1-amount/space)*10;
     const cost=distanceTo(tile,miner)+dockDistance*.32+danger+loadingCost+(claimed.has(tileKey(x,y))?5:0);
-    candidates.push({x,y,cost});
+    candidates.push({x,y,cost,amount});
   };
-  for (const {x,y} of faction.explored.values()) consider(x,y);
-  candidates.sort((a,b)=>a.cost-b.cost);
+  for (const {x:mx,y:my,radius} of battlefield.seams) {
+    for (let x=Math.ceil(mx-radius);x<=Math.floor(mx+radius);x++) {
+      for (let y=Math.ceil(my-radius);y<=Math.floor(my+radius);y++) {
+        if (faction.explored.has(tileKey(x,y))) consider(x,y);
+      }
+    }
+  }
+  candidates.sort((a,b)=>Number(b.amount>=12)-Number(a.amount>=12) || a.cost-b.cost);
   for (const target of candidates) {
     const course=findPath(target,miner);
     if (course) return {target,course};
@@ -3007,8 +3022,38 @@ function findOreRoute(miner,minimum) {
   return null;
 }
 
-function setCourse(target,kind,unit,course=findPath(target,unit)) {
-  if (!FACTIONS[unit.team].explored.has(tileUnder(target.x,target.y))) return false;
+function findOreFrontier(miner) {
+  const {explored}=FACTIONS[miner.team];
+  const claims=units.filter(unit=>unit!==miner && unit.team===miner.team && unit.health>0 && unit.goal?.kind==='ore-scout')
+    .map(unit=>unit.goal);
+  const buildings=pathBuildingGrid();
+  const open=(x,y)=>explored.has(tileKey(x,y)) && pathTileOpen(buildings,x,y);
+  const start={x:Math.round(miner.x),y:Math.round(miner.y),previous:null};
+  const queue=[start];
+  const visited=new Set([pathCell(start.x,start.y)]);
+  for (let i=0;i<queue.length;i++) {
+    const tile=queue[i];
+    if (tile.previous && NEIGHBORS.some(([dx,dy])=>(!dx || !dy) &&
+      onMap(tile.x+dx,tile.y+dy) && !explored.has(tileKey(tile.x+dx,tile.y+dy))) &&
+        claims.every(goal=>distanceTo(tile,goal)>=miner.vision) && !unitPositionBlocked(miner,tile.x,tile.y,true)) {
+      const course=[];
+      for (let point=tile;point;point=point.previous) {
+        if (point!==start || distanceTo(miner,point)>.04) course.push({x:point.x,y:point.y});
+      }
+      return {target:{x:tile.x,y:tile.y},course:course.reverse()};
+    }
+    for (const [dx,dy] of NEIGHBORS) {
+      const x=tile.x+dx,y=tile.y+dy,key=pathCell(x,y);
+      if (visited.has(key) || !open(x,y) || (dx && dy && (!open(x,tile.y) || !open(tile.x,y)))) continue;
+      visited.add(key);
+      queue.push({x,y,previous:tile});
+    }
+  }
+  return null;
+}
+
+function setCourse(target,kind,unit,course=findPath(target,unit),{allowUnexplored=false}={}) {
+  if (!allowUnexplored && !FACTIONS[unit.team].explored.has(tileUnder(target.x,target.y))) return false;
   if (!course) {
     if (unit.team==='player') {
       notice('该位置无法通行',unit.team);
@@ -3107,11 +3152,15 @@ function dispatchMiner(miner) {
     returnToBase(miner);
     return;
   }
-  const order=findOreRoute(miner,12) || findOreRoute(miner,1);
+  const order=findOreRoute(miner);
   if (order) {
     setCourse(order.target,'mine',miner,order.course);
-  } else if (miner.cargo>0) {
-    returnToBase(miner);
+  } else if (!(miner.cargo>0 && returnToBase(miner))) {
+    const frontier=findOreFrontier(miner);
+    if (frontier) {
+      miner.lastOreSearchArea=FACTIONS[miner.team].explored.size;
+      setCourse(frontier.target,'ore-scout',miner,frontier.course);
+    } else miner.nextMineSearch=game.time+4+((miner.id??0)%7)*.15;
   }
 }
 
@@ -3195,6 +3244,15 @@ function advanceMiner(miner,dt) {
       dispatchMiner(miner);
     }
     return;
+  }
+  if (miner.goal?.kind==='ore-scout' && game.time>=miner.nextMineSearch) {
+    const explored=FACTIONS[miner.team].explored.size;
+    if (explored!==miner.lastOreSearchArea) {
+      miner.lastOreSearchArea=explored;
+      miner.nextMineSearch=game.time+1.6;
+      const order=findOreRoute(miner);
+      if (order) setCourse(order.target,'mine',miner,order.course);
+    }
   }
   navigate(miner,dt);
   if (miner.mode==='idle' && miner.autoMine && !miner.attackTarget &&
@@ -3358,6 +3416,7 @@ function setFlightCourse(unit,{x,y},kind) {
 
 function returnBomber(unit) {
   unit.attackTarget=null;
+  unit.bombPoint=null;
   unit.engaged=false;
   unit.route=[];
   unit.goal=null;
@@ -3822,13 +3881,13 @@ function navigate(unit,dt) {
         break;
       }
       const goal=unit.goal;
-      const path=goal && findPath(goal,unit);
+      const path=goal && goal.kind!=='ore-scout' && findPath(goal,unit);
       unit.route=path?smoothCourse(unit,path):[];
       unit.velocity=0;
       if (!path) {
         unit.goal=null;
         unit.mode='idle';
-        if (unit.team==='player') log(unit.label+'的路线被阻挡。',unit.team);
+        if (unit.team==='player' && goal?.kind!=='ore-scout') log(unit.label+'的路线被阻挡。',unit.team);
       }
       break;
     }
@@ -5441,6 +5500,17 @@ function targetPoint(from,target) {
   };
 }
 
+function launchBombSortie(unit,point,target=null) {
+  if (unit.mode!=='parked' || game.time<(unit.readyForSortie??0)) return false;
+  unit.attackTarget=target;
+  unit.bombPoint=target?null:point;
+  unit.mode='bombing';
+  setFlightCourse(unit,point,'bomb');
+  const name=target?(target.width?buildingSpec(target.type).label:target.label):'地图坐标 '+point.x+'、'+point.y;
+  log(factionName(unit.team)+'轰炸机出动，目标为'+name+'。',unit.team);
+  return true;
+}
+
 function orderAttack(members,target,automatic=false) {
   if (!(target.health>0)) return 0;
   let ordered=0;
@@ -5448,12 +5518,7 @@ function orderAttack(members,target,automatic=false) {
     if (!WEAPONS[unit.type] || unit.team===target.team || !canAttackTarget(unit,target) ||
         !canSeeEntity(FACTIONS[unit.team],target)) continue;
     if (unit.type==='bomber') {
-      if (automatic || unit.mode!=='parked' || game.time<(unit.readyForSortie??0) || target.team==='neutral') continue;
-      unit.attackTarget=target;
-      unit.mode='bombing';
-      setFlightCourse(unit,targetPoint(unit,target),'bomb');
-      log(factionName(unit.team)+'轰炸机出动，目标为'+(target.width?buildingSpec(target.type).label:target.label)+'。',unit.team);
-      ordered++;
+      if (!automatic && target.team!=='neutral' && launchBombSortie(unit,targetPoint(unit,target),target)) ordered++;
       continue;
     }
     unit.attackTarget=target;
@@ -5480,11 +5545,15 @@ function clearAttackOrder(unit) {
 
 function orderPlayerMovement(members,tile) {
   const pending=new Set(members.sort((a,b)=>distanceTo(a,tile)-distanceTo(b,tile)));
-  const mine=amountAt(tile.x,tile.y)>0;
+  const mine=members.some(unit=>unit.type==='miner') && FACTIONS.player.explored.has(tileKey(tile.x,tile.y)) &&
+    amountAt(tile.x,tile.y)>0;
   let ordered=0;
   for (const unit of pending) {
     pending.delete(unit);
-    if (unit.type==='bomber') continue;
+    if (unit.type==='bomber') {
+      if (launchBombSortie(unit,tile)) ordered++;
+      continue;
+    }
     if (isAirborne(unit)) {
       const drop=unit.type==='helicopter' && unit.passengers.length>0;
       setFlightCourse(unit,tile,drop?'drop':unit.type==='reconPlane'?'scout':'move');
@@ -5492,8 +5561,11 @@ function orderPlayerMovement(members,tile) {
       ordered++;
       continue;
     }
-    const kind=unit.type==='miner' && mine?'mine':'move';
-    if (!setCourse(tile,kind,unit)) continue;
+    const route=findPath(tile,unit,false,8,{nearest:true});
+    if (!route) continue;
+    const destination=route.at(-1)??{x:Math.round(unit.x),y:Math.round(unit.y)};
+    const kind=unit.type==='miner' && mine && sameTile(destination,tile)?'mine':'move';
+    if (!setCourse(destination,kind,unit,route,{allowUnexplored:true})) continue;
     ordered++;
     if (kind!=='move' || unit.type==='miner') continue;
     const followers=formMarchGroup(unit,[...pending].filter(member=>member.type!=='miner' &&
@@ -5543,9 +5615,10 @@ function executePlayerOrder(order,resolve) {
       playAt('build',yardCenter(building),building);
       return success();
     }
-    if (!faction.explored.has(tileKey(x,y))) return fail('unexplored');
-    if (order.kind==='rally') return ready(selected) && supportsRally(selected) && setRallyPoint(selected,{x,y})
-      ? success() : fail('route');
+    if (order.kind==='rally') {
+      if (!faction.explored.has(tileKey(x,y))) return fail('unexplored');
+      return ready(selected) && supportsRally(selected) && setRallyPoint(selected,{x,y}) ? success() : fail('route');
+    }
   }
   if (order.kind!=='move' && order.kind!=='target' || !Array.isArray(order.units)) return fail('invalid');
   const members=[...new Set(order.units.map(resolve))].filter(unit=>own(unit) && !unit.width &&
@@ -5690,7 +5763,8 @@ function fireWeapon(attacker,from,weapon,target,hits) {
     const [x,y]=art.theme.laser.emitter;
     origin={x:art.left+x*art.width,y:art.top+y*art.height};
   }
-  const height=target.width ? Math.min(32,buildingSpec(target.type).body*.62) :
+  const groundPoint=!target.type;
+  const height=groundPoint?0:target.width ? Math.min(32,buildingSpec(target.type).body*.62) :
     (WEAPONS[target.type]?.height??UNIT_ART[target.type].hitHeight*.72)*.70;
   const witnesses=Object.values(FACTIONS).filter(faction=>canSeeEntity(faction,attacker) &&
     canSeeEntity(faction,target)).map(faction=>faction.team);
@@ -5704,15 +5778,18 @@ function fireWeapon(attacker,from,weapon,target,hits) {
       playAt(cue,from,attacker);
     }
   }
-  const multiplier=armoredTarget(target)?(weapon.armorFactor??(effect==='dog'?1/3:1)):(weapon.softFactor??1);
-  hits.push({target,attacker,damage:damageAfterDefense(target,damage*multiplier)});
-  if (weapon.splash) {
+  if (!groundPoint) {
+    const multiplier=armoredTarget(target)?(weapon.armorFactor??(effect==='dog'?1/3:1)):(weapon.softFactor??1);
+    hits.push({target,attacker,damage:damageAfterDefense(target,damage*multiplier)});
+  }
+  const radius=groundPoint?1.6:weapon.splash;
+  if (radius) {
     for (const other of [...units,...structures]) {
       if (other===target || other.team===attacker.team || other.team==='neutral' || other.health<=0 ||
           isAirborne(other)!==isAirborne(target)) continue;
       const distance=distanceTo(point,targetPoint(point,other));
-      if (distance>weapon.splash) continue;
-      const splash=damage*(.68-.33*distance/weapon.splash);
+      if (distance>radius) continue;
+      const splash=damage*(.68-.33*distance/radius);
       hits.push({target:other,attacker,damage:damageAfterDefense(other,splash)});
     }
   }
@@ -5733,10 +5810,10 @@ function noteGroundImpact({x,y},effect) {
 }
 
 function advanceBombSortie(unit,hits) {
-  const target=unit.attackTarget;
+  const target=unit.attackTarget??unit.bombPoint;
   if (unit.mode!=='bombing') return;
-  if (!target || target.health<=0 || target.team===unit.team || target.team==='neutral' ||
-      !canAttackTarget(unit,target) || !canSeeEntity(FACTIONS[unit.team],target)) {
+  if (!target || (!unit.bombPoint && (target.health<=0 || target.team===unit.team || target.team==='neutral' ||
+      !canAttackTarget(unit,target) || !canSeeEntity(FACTIONS[unit.team],target)))) {
     returnBomber(unit);
     return;
   }
@@ -6446,6 +6523,8 @@ function syncHud() {
       mode=unit.passengerCount==null?task:task+' · 载员 '+unit.passengerCount+'/'+HELICOPTER_CAPACITY;
     } else if (unit.type==='reconPlane') {
       mode='航空侦察';
+    } else if (unit.type==='miner' && unit.goal?.kind==='ore-scout') {
+      mode=unit.engaged?'交战中':'探路找矿';
     } else if (unit.type==='miner' && unit.mode==='idle' && unit.autoMine && !unit.attackTarget && !unit.engaged) {
       mode=unit.cargo>=CARGO_LIMIT-.001?'等待卸矿':'寻找矿脉';
     } else {
@@ -6632,12 +6711,18 @@ function mapClick(point) {
       return;
     }
     const selected=game.selection.filter(unit=>unit.team==='player');
-    if (selected.length && !target) {
-      void sendPlayerOrder({kind:'move',units:selected.map(unit=>unit.viewId),...tile},'已下达移动指令。');
+    if (selected.length && target && (
+      target.team==='enemy' && selected.some(unit=>WEAPONS[unit.type] && canAttackTarget(unit,target)) ||
+      target.width && target.team!=='player' && selected.some(unit=>unit.type==='engineer') ||
+      target.team==='player' && target.type==='helicopter' && selected.some(unit=>canTransport(target,unit)))) {
+      void sendPlayerOrder({kind:'target',units:selected.map(unit=>unit.viewId),target:target.viewId},'已下达目标指令。');
       return;
     }
-    if (selected.length && (target.team!=='player' || target.type==='helicopter' && !selected.includes(target))) {
-      void sendPlayerOrder({kind:'target',units:selected.map(unit=>unit.viewId),target:target.viewId},'已下达目标指令。');
+    if (selected.length && (!target || target.width || target.team!=='player')) {
+      const destination=target?.width?yardCenter(target):tile;
+      const coordinates={x:Math.round(destination.x),y:Math.round(destination.y)};
+      const message=selected.every(unit=>unit.type==='bomber')?'已指定轰炸位置。':'已下达移动指令。';
+      void sendPlayerOrder({kind:'move',units:selected.map(unit=>unit.viewId),...coordinates},message);
       return;
     }
     if (!target && game.selectedBuilding && supportsRally(game.selectedBuilding)) {

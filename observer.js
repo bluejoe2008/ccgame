@@ -471,7 +471,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=command-dock';
+  script.src = 'game.js?v=map-exploration';
   document.head.append(script);
 }
 bootObserver();
