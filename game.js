@@ -4593,6 +4593,29 @@ function advanceMounts(faction,members) {
   }
 }
 
+function reserveForPriorityFighter(faction,yards,airport,members) {
+  if (!faction.priorityFighter) return false;
+  if (members.some(isAirborne)) {
+    delete faction.priorityFighter;
+    return false;
+  }
+  if (airport) {
+    if (airport.queue.some(job=>job.type==='fighter')) return false;
+    if (airport.remaining===0 && enqueue(airport,'fighter')) {
+      log(factionName(faction.team)+'机场开始生产优先调度的战斗机。',faction.team);
+      return false;
+    }
+    return true;
+  }
+  const ready=yards.filter(yard=>readyYard(yard,faction.team));
+  if (!ready.length) return false;
+  if (faction.credits>=BUILDINGS.airport.cost && game.time>=(faction.nextAirportSiteCheck??0)) {
+    faction.nextAirportSiteCheck=game.time+2;
+    ready.some(yard=>placeAiBuilding({type:'airport',x:5,y:-4},yard,faction.team));
+  }
+  return true;
+}
+
 function advanceFaction(faction) {
   const {team}=faction;
   if (game.time<faction.nextOrder) return;
@@ -4614,10 +4637,15 @@ function advanceFaction(faction) {
   const intelligence=scoutBattlefield(faction);
   assessStrength(faction,army,intelligence.contacts,yard??factory??barracks??refinery);
   const raid=urgentRaid(faction,intelligence.contacts);
-  const rushingDefenses=raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
+  const reservingFighter=reserveForPriorityFighter(faction,yards,airport,members);
+  const rushingDefenses=!reservingFighter && raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
   if (!raid?.critical) advanceMounts(faction,members);
   reviewCommander(faction,army,buildings,members,intelligence,raid);
   directAiArmy(faction,army,buildings,intelligence,raid);
+  if (reservingFighter) {
+    advanceAiCapture(faction,barracks,members,false);
+    return;
+  }
   if (barracks && !barracks.queue.length && openingReconAllowed(faction,intelligence,raid) &&
       !army.some(isFastScout)) enqueue(barracks,'dog');
   const fleet=miningFleet(faction,buildings,members);
