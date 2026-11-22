@@ -37,6 +37,7 @@ const MAX_FACTORY_SPEED_BONUS=.60;
 const OPENING_SCOUT_WINDOW=100;
 const BASE_DEFENSE_RADIUS=12;
 const CRITICAL_RAID_TARGETS=new Set(['yard','mcv','factory','refinery','barracks','airport','solar','diesel']);
+const EMERGENCY_DEFENSE_TYPES=new Set(['turret','laser']);
 const REFINERY_PAD = {x:-.85,y:-1.40,width:3.92,height:3.70};
 const OIL_FIELD = {label:'油田',width:2,height:2,roof:82,body:66,health:350,color:'#d4aa72',powerUse:12};
 const MAP_SEED=globalThis.matchEngine?.seed??globalThis.matchBootstrap?.seed??
@@ -1547,34 +1548,126 @@ function drawIdleExhaust(context,unit,origin,phase) {
   context.restore();
 }
 
-function drawGait(context,image,width,height,phase,strength,dog,front,engineer) {
-  const sw=image.naturalWidth, sh=image.naturalHeight;
-  const hip=dog ? .64 : engineer ? .70 : .60;
-  const start=Math.floor(sh*hip);
-  const columns=dog && !front ? 4 : 2;
-  const bands=5;
-  const scale=width/sw;
-  const reach=front ? 1.45 : dog ? 4 : 4.6;
-  const lift=front ? 3.5 : dog ? 3.1 : 2.5;
-  context.drawImage(image,0,0,sw,start+1,-width/2,-height,width,(start+1)*scale);
-  for (let leg=0;leg<columns;leg++) {
-    const left=Math.round(sw*leg/columns);
-    const right=Math.round(sw*(leg+1)/columns);
-    // The dog alternates opposite paws. Its center of mass stays above the stride.
-    const offset=dog && columns===4 ? (leg===0 || leg===3?0:Math.PI) : leg*Math.PI;
-    const stride=Math.sin(phase+offset);
-    const swing=Math.max(0,Math.cos(phase+offset));
-    for (let band=0;band<bands;band++) {
-      const top=Math.round(mix(start,sh,band/bands));
-      const bottom=Math.round(mix(start,sh,(band+1)/bands));
-      const t=(band+.5)/bands;
-      const x=stride*t*strength*reach;
-      const y=-swing*t*strength*lift;
-      const overlap=bottom===sh?0:1;
-      context.drawImage(image,left,top,right-left,bottom-top+overlap,
-        left*scale-width/2+x,top*scale-height+y,(right-left)*scale,(bottom-top+overlap)*scale+.2);
-    }
+// Each painted limb has a joint, a foot, a contact phase, and a cutout in sprite pixels.
+// The red and blue sprites use the same silhouettes.
+const GAIT_LIMBS={
+  soldier:[
+    [
+      [[49,107],[16,179],.5,[[31,105],[58,110],[66,128],[54,153],[42,190],[0,190],[0,156]]],
+      [[65,106],[91,179],0,[[58,102],[83,103],[111,127],[121,174],[123,190],[46,190],[61,148],[66,128]]],
+    ],
+    [
+      [[29,108],[22,150],.5,[[8,107],[34,107],[42,128],[36,158],[0,164],[0,119]]],
+      [[47,112],[49,183],0,[[35,104],[76,111],[76,156],[67,190],[28,190],[35,151]]],
+    ],
+    [
+      [[54,104],[75,144],.5,[[52,102],[76,101],[97,126],[97,154],[67,159],[57,138]]],
+      [[42,106],[20,177],0,[[20,105],[54,100],[66,117],[57,139],[42,190],[0,190],[0,151]]],
+    ],
+    [
+      [[56,107],[56,151],.5,[[48,104],[70,104],[75,150],[49,163],[46,130]]],
+      [[35,109],[39,181],0,[[21,110],[47,104],[51,138],[60,188],[23,190],[19,147]]],
+    ],
+  ],
+  dog:[
+    [
+      [[77,71],[94,120],0,[[65,69],[96,66],[112,108],[106,127],[73,128],[65,103]]],
+      [[145,67],[175,124],.5,[[142,65],[164,65],[188,112],[193,131],[150,131],[143,96]]],
+      [[57,70],[47,123],.13,[[39,75],[65,66],[74,93],[62,127],[27,131],[31,102]]],
+      [[131,68],[123,124],.63,[[113,67],[144,68],[148,95],[142,131],[106,131],[109,100]]],
+    ],
+    [
+      [[50,39],[49,93],0,[[38,39],[61,38],[64,68],[60,102],[37,102],[36,60]]],
+      [[107,63],[101,122],.5,[[93,65],[118,59],[119,111],[115,137],[87,135],[86,98]]],
+      [[64,49],[78,110],.13,[[57,46],[82,44],[89,85],[89,119],[66,123],[56,79]]],
+      [[127,77],[146,158],.63,[[119,75],[149,75],[159,125],[168,167],[129,167],[112,112]]],
+    ],
+    [
+      [[70,116],[69,152],0,[[63,111],[87,112],[88,157],[61,166],[59,136]]],
+      [[127,72],[126,126],.5,[[120,72],[146,76],[148,131],[119,142],[116,95]]],
+      [[56,121],[42,180],.13,[[37,125],[66,115],[74,136],[57,187],[49,190],[25,190],[23,153]]],
+      [[110,89],[100,146],.63,[[94,88],[119,85],[124,125],[115,154],[86,156],[85,121]]],
+    ],
+    [
+      [[54,121],[52,159],.5,[[49,120],[64,114],[69,145],[62,174],[43,174],[42,157]]],
+      [[18,119],[16,181],0,[[7,114],[23,125],[28,151],[33,187],[5,190],[2,149]]],
+    ],
+  ],
+};
+const gaitArt=new WeakMap();
+
+function gaitLayers(image,type,facing,equine) {
+  if (gaitArt.has(image)) return gaitArt.get(image);
+  const w=image.naturalWidth,h=image.naturalHeight;
+  const canvas=document.createElement('canvas');
+  canvas.width=w;
+  canvas.height=h;
+  const body=canvas.getContext('2d');
+  body.drawImage(image,0,0);
+  body.globalCompositeOperation='destination-out';
+  const count=equine && facing!==3?4:2;
+  const top=Math.round(h*(type==='engineer'?.70:equine?.67:.60));
+  const definitions=GAIT_LIMBS[type]?.[facing] ?? Array.from({length:count},(_,index)=>{
+    const left=Math.round(w*index/count),right=Math.round(w*(index+1)/count);
+    const x=(left+right)/2;
+    return [[x,top],[x,h-2],index%2*.5,[[left,top],[right,top],[right,h],[left,h]]];
+  });
+  const limbs=definitions.map(([hip,foot,contact,polygon])=>{
+    const path=new Path2D();
+    polygon.forEach(([x,y],index)=>index?path.lineTo(x,y):path.moveTo(x,y));
+    path.closePath();
+    body.fill(path);
+    const left=Math.min(...polygon.map(point=>point[0]));
+    const top=Math.min(...polygon.map(point=>point[1]));
+    const layer=document.createElement('canvas');
+    layer.width=Math.max(...polygon.map(point=>point[0]))-left;
+    layer.height=Math.max(...polygon.map(point=>point[1]))-top;
+    const part=layer.getContext('2d');
+    part.translate(-left,-top);
+    part.clip(path);
+    part.drawImage(image,0,0);
+    const dx=foot[0]-hip[0],dy=foot[1]-hip[1];
+    const squaredLength=dx*dx+dy*dy;
+    return { layer, left, top, hip, foot, contact, axisX:dx/squaredLength, axisY:dy/squaredLength };
+  });
+  const art={body:canvas,limbs};
+  gaitArt.set(image,art);
+  return art;
+}
+
+function drawGait(context,image,width,height,unit,facing,forward,mirror,equine) {
+  const dog=unit.type==='dog';
+  const quadruped=dog || equine;
+  const strideLength=equine?1.46:dog?1.34:.82;
+  const stance=equine?.34:dog?.30:.43;
+  const phase=(unit.travel??0)/strideLength;
+  const strength=smooth(Math.min(1,unit.stride*3.5));
+  const scale=width/image.naturalWidth;
+  const strideX=forward.x*(mirror?-1:1)*strideLength*stance;
+  const strideY=forward.y*strideLength*stance;
+  const bounce=(quadruped?Math.cos(phase*Math.PI*2):Math.cos(phase*Math.PI*4))*
+    (dog?1.25:equine?1.65:.8)*strength;
+  const art=gaitLayers(image,unit.type,facing,equine);
+
+  context.save();
+  context.translate(-width/2,-height+bounce);
+  context.scale(scale,scale);
+  for (const {layer,left,top,hip,foot,contact,axisX,axisY} of art.limbs) {
+    const cycle=(phase+1-contact)%1;
+    const swing=Math.max(0,(cycle-stance)/(1-stance));
+    // During contact the foot moves backwards exactly as far as the unit advances.
+    const reach=cycle<stance?.5-cycle/stance:-.5+smooth(swing);
+    const lift=Math.sin(swing*Math.PI)*(dog?4.7:equine?4.4:4);
+    const dx=strength*(strideX*reach/scale+(hip[0]-foot[0])*.48);
+    const dy=(strength*(strideY*reach-lift)-bounce)/scale;
+    context.save();
+    context.translate(hip[0],hip[1]);
+    context.transform(1+dx*axisX,dy*axisX,dx*axisY,1+dy*axisY,0,0);
+    context.drawImage(layer,left-hip[0],top-hip[1]);
+    context.restore();
   }
+  context.drawImage(art.body,0,0);
+  context.restore();
 }
 
 function drawIdlePose(context,image,width,height,phase,type,front) {
@@ -1694,8 +1787,7 @@ function renderUnit(context,unit,origin) {
   const image=sprites.get(unit.type+'-'+facing+'-'+factionTint(unit.team));
   if (image?.naturalWidth) {
     const height=width*image.naturalHeight/image.naturalWidth;
-    const bodyBob=wheeled ? Math.sin(travel*14)*.48*strength :
-      Math.sin(phase*2)*strength*(dog?1.05:.62);
+    const bodyBob=wheeled?Math.sin(travel*14)*.48*strength:0;
     context.save();
     context.translate(origin.x,origin.y+offset+bodyBob);
     if (wheeled && !reducedMotion.matches && strength>.025) {
@@ -1705,7 +1797,7 @@ function renderUnit(context,unit,origin) {
     if (isAirborne(unit)) {
       context.drawImage(image,-width/2,-height*.75,width,height);
     } else if (!wheeled && strength>.025) {
-      drawGait(context,image,width,height,phase,strength,quadruped,facing===3,unit.type==='engineer');
+      drawGait(context,image,width,height,unit,facing,forward,mirror,equine);
     } else if (!wheeled && !equine && idlePhase!==null) {
       drawIdlePose(context,image,width,height,idlePhase,unit.type,facing===3);
     } else context.drawImage(image,-width/2,-height,width,height);
@@ -3400,7 +3492,8 @@ function buildSupportFacilities(faction,yard,buildings) {
 function advanceProduction(dt) {
   for (const building of structures) {
     if (building.remaining>0) {
-      building.remaining=Math.max(0,building.remaining-dt);
+      const buildRate=building.rushUntil>game.time?2:1;
+      building.remaining=Math.max(0,building.remaining-dt*buildRate);
       if (building.remaining===0) {
         const label=buildingSpec(building.type).label;
         playAt('ready',yardCenter(building),building);
@@ -3896,9 +3989,43 @@ function placeAiBuilding(plan,yard,team) {
     if (!withinYard(placementBounds({type:plan.type,...tile,width:spec.width,height:spec.height}),yard)) continue;
     const building=beginConstruction(plan.type,tile,team);
     if (!building) continue;
-    log(factionName(team)+buildingSpec(plan.type).label+'开始施工。',team);
+    if (plan.rush) building.rushUntil=game.time+1;
+    log(factionName(team)+spec.label+(plan.rush?'开始抢建。':'开始施工。'),team);
     playAt('build',yardCenter(building),building);
     return building;
+  }
+  return false;
+}
+
+function rushDefenses(faction,yards,buildings,contacts,raid) {
+  const distance=yard=>distanceTo(yardCenter(yard),raid.point);
+  const yard=yards.filter(yard=>readyYard(yard,faction.team) && distance(yard)<=BASE_DEFENSE_RADIUS)
+    .sort((a,b)=>distance(a)-distance(b))[0];
+  if (!yard) return;
+
+  const defenses=baseFacilities(yard,yards,buildings).filter(building=>EMERGENCY_DEFENSE_TYPES.has(building.type));
+  const buildingNow=defenses.filter(building=>building.remaining>0);
+  for (const building of buildingNow) building.rushUntil=game.time+1;
+  if (buildingNow.length) return true;
+  if (defenses.length>=3 || faction.credits<BUILDINGS.turret.cost) return false;
+
+  const attackers=contacts.filter(contact=>(WEAPONS[contact.type] || BUILDINGS[contact.type]?.weapon) &&
+    distanceTo(raid.point,targetPoint(raid.point,contact))<=BASE_DEFENSE_RADIUS);
+  const front=attackers.includes(raid.attacker)?raid.attacker:nearestOpponent({...raid.point,team:faction.team},
+    attackers,BASE_DEFENSE_RADIUS);
+  const incoming=front?targetPoint(raid.point,front):raid.point;
+  const center=yardCenter(yard);
+  const length=distanceTo(incoming,center);
+  const x=length>.1?Math.round((incoming.x-center.x)*6/length):5;
+  const y=length>.1?Math.round((incoming.y-center.y)*6/length):1;
+  const plannedLoad=buildings.reduce((sum,building)=>sum+(buildingSpec(building.type).powerUse??0),0);
+  const laserReady=faction.credits>=BUILDINGS.laser.cost &&
+    faction.power.supply>=plannedLoad+BUILDINGS.laser.powerUse;
+  const airRaid=attackers.length>0 && attackers.every(isAirborne);
+  const preferLaser=airRaid || (laserReady && defenses.length>0 && !defenses.some(building=>building.type==='laser'));
+  const types=preferLaser?(airRaid?['laser']:['laser','turret']):['turret'];
+  for (const type of types) {
+    if (placeAiBuilding({type,x,y,rush:true},yard,faction.team)) return true;
   }
   return false;
 }
@@ -4199,6 +4326,7 @@ function advanceFaction(faction) {
   const intelligence=scoutBattlefield(faction);
   assessStrength(faction,army,intelligence.contacts,yard??factory??barracks??refinery);
   const raid=urgentRaid(faction,intelligence.contacts);
+  const rushingDefenses=raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
   if (!raid?.critical) advanceMounts(faction,members);
   reviewCommander(faction,army,buildings,members,intelligence,raid);
   directAiArmy(faction,army,buildings,intelligence,raid);
@@ -4300,7 +4428,7 @@ function advanceFaction(faction) {
     }
   }
 
-  if (raid?.critical && canBuildDefenses) buildDefenses(faction,yard,buildings,intelligence.contacts);
+  if (raid?.critical && canBuildDefenses && !rushingDefenses) buildDefenses(faction,yard,buildings,intelligence.contacts);
 }
 
 function distanceTo(a,b) {
@@ -5336,7 +5464,7 @@ function stepSimulation(dt) {
 function frame(timestamp) {
   const dt=Math.min(.046,Math.max(0,(timestamp-(lastFrame||timestamp))*.001));
   lastFrame=timestamp;
-  interpolateObservation(dt);
+  interpolateObservation(timestamp);
   const speed=370*dt;
   const dx=(Number(pressed.has('ArrowRight'))-Number(pressed.has('ArrowLeft')))*speed;
   const dy=(Number(pressed.has('ArrowDown'))-Number(pressed.has('ArrowUp')))*speed;

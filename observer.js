@@ -9,7 +9,11 @@ let observationRequest = 0;
 let observationTimer;
 const displayedUnits = new Map();
 const displayedBuildings = new Map();
-const unitPositions = new Map();
+const unitMotionSamples = new Map();
+const motionDelay = 220;
+const linearPoseFields = ['x','y','travel','stride','lean'];
+const angularPoseFields = ['heading','turretHeading'];
+const poseFields = [...linearPoseFields,...angularPoseFields];
 
 function savedPerspective() {
   try {
@@ -35,12 +39,13 @@ function updateMatchControls() {
   byId('end-session').disabled = !running || !observerConnected || pendingControl;
 }
 
-function updateObserverEntities(records, registry, destination) {
+function updateObserverEntities(records, registry, destination, receivedAt) {
+  const mobile = registry === displayedUnits;
   const active = new Set(records.map(record => record.viewId));
   for (const id of registry.keys()) {
     if (!active.has(id)) {
       registry.delete(id);
-      unitPositions.delete(id);
+      if (mobile) unitMotionSamples.delete(id);
     }
   }
   const updated = records.map(record => {
@@ -49,29 +54,46 @@ function updateObserverEntities(records, registry, destination) {
       entity = {};
       registry.set(record.viewId, entity);
     }
-    const moving = registry === displayedUnits && !reducedMotion.matches && typeof entity.x === 'number' &&
-      Math.hypot(entity.x-record.x,entity.y-record.y) < 5;
-    const x = entity.x, y = entity.y;
-    Object.assign(entity,record);
-    if (moving) {
-      unitPositions.set(entity.viewId,{ x:record.x, y:record.y });
-      entity.x = x;
-      entity.y = y;
-    } else if (registry === displayedUnits) {
-      unitPositions.delete(entity.viewId);
+    if (!mobile || reducedMotion.matches) {
+      if (mobile) unitMotionSamples.delete(record.viewId);
+      return Object.assign(entity,record);
     }
-    return entity;
+    const samples = unitMotionSamples.get(record.viewId) ?? [];
+    const last = samples.at(-1);
+    const pose = {
+      x:record.x, y:record.y, travel:record.travel ?? 0, stride:record.stride ?? 0,
+      lean:record.lean ?? 0, heading:record.heading,
+      turretHeading:record.turretHeading ?? record.heading,
+    };
+    const continuous = last && entity.type === record.type && pose.travel >= last.pose.travel &&
+      receivedAt-last.time < 700 && Math.hypot(last.pose.x-pose.x,last.pose.y-pose.y) < 5;
+    const displayed = continuous ? Object.fromEntries(poseFields.map(key=>[key,entity[key]])) : pose;
+    if (!continuous) samples.length=0;
+    samples.push({ time:receivedAt, pose });
+    if (samples.length>6) samples.shift();
+    unitMotionSamples.set(record.viewId,samples);
+    return Object.assign(entity,record,displayed);
   });
   destination.splice(0,destination.length,...updated);
 }
 
-function interpolateObservation(dt) {
-  const alpha = 1-Math.exp(-dt*14);
-  for (const [id, position] of unitPositions) {
+function interpolateObservation(timestamp) {
+  const time = timestamp-motionDelay;
+  for (const [id, samples] of unitMotionSamples) {
     const unit = displayedUnits.get(id);
     if (!unit) continue;
-    unit.x = mix(unit.x,position.x,alpha);
-    unit.y = mix(unit.y,position.y,alpha);
+    while (samples.length>1 && samples[1].time<=time) samples.shift();
+    const [from,to] = samples;
+    if (reducedMotion.matches || !to || time<=from.time) {
+      Object.assign(unit,(reducedMotion.matches ? samples.at(-1) : from).pose);
+      continue;
+    }
+    // Distance and position follow the same samples so feet don't outrun the rendered unit.
+    const progress = (time-from.time)/(to.time-from.time);
+    for (const key of linearPoseFields) unit[key] = mix(from.pose[key],to.pose[key],progress);
+    for (const key of angularPoseFields) {
+      unit[key] = from.pose[key]+angleDifference(to.pose[key],from.pose[key])*progress;
+    }
   }
 }
 
@@ -91,7 +113,7 @@ function applyObservation(snapshot) {
   faction.sight = new Set(snapshot.sight);
   for (const [x,y,value] of snapshot.ore) deposits.set(tileKey(x,y),value);
   updateObserverEntities(snapshot.buildings,displayedBuildings,structures);
-  updateObserverEntities(snapshot.units,displayedUnits,units);
+  updateObserverEntities(snapshot.units,displayedUnits,units,performance.now());
   const entity = id => displayedUnits.get(id) ?? displayedBuildings.get(id) ?? null;
   for (const unit of units) {
     unit.attackTarget = entity(unit.attackId);
@@ -155,7 +177,7 @@ function changeObserverPerspective(team,origin) {
   selectUnit(null);
   displayedUnits.clear();
   displayedBuildings.clear();
-  unitPositions.clear();
+  unitMotionSamples.clear();
   units.length = structures.length = shots.length = wrecks.length = movementDust.length = 0;
   byId('log').replaceChildren();
   lastLog = 0;
@@ -209,7 +231,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=shared-match';
+  script.src = 'game.js?v=footfall';
   document.head.append(script);
 }
 bootObserver();
