@@ -20,6 +20,8 @@ const CARGO_LIMIT = 100;
 const SCENT_RANGE=8.4;
 const MOUNTED_SPEED=5.0;
 const JET_ALTITUDE=102;
+const AIRCRAFT_TYPES=new Set(['fighter','bomber','reconPlane','helicopter']);
+const HELICOPTER_CAPACITY=4;
 const ORE_GROW_DELAY = 12;
 const ORE_GROW_RATE = 2.2;
 const UNDERGROUND_ORE_FRACTION=.65;
@@ -110,6 +112,7 @@ const WEAPONS={
   cavalry:{health:68,defense:.07,range:3.5,damage:12,reload:.73,height:25},
   mountedCavalry:{health:127,defense:.12,range:3.7,damage:17,reload:.80,height:42},
   fighter:{health:125,defense:.10,range:5.6,damage:41,reload:1.45,height:12,effect:'rocket',armorFactor:1.12},
+  bomber:{health:160,defense:.16,range:2.35,damage:110,reload:1,height:8,effect:'bomb'},
 };
 const YARD={label:'建造场',time:3,width:3,height:2,roof:124,body:66,health:490,color:'#d9ac73',powerUse:18};
 const BUILDINGS = {
@@ -148,6 +151,9 @@ const PRODUCTS = {
   horse:{label:'战马',cost:160,time:3.3,speed:4.6,vision:4.8,health:85,building:'barracks'},
   cavalry:{label:'骑兵',cost:240,time:3.9,speed:2.55,vision:5.5,building:'barracks'},
   fighter:{label:'战斗机',cost:850,time:8.2,speed:8.1,vision:8.5,building:'airport'},
+  bomber:{label:'轰炸机',cost:1100,time:10.6,speed:6.8,vision:7.8,building:'airport'},
+  reconPlane:{label:'侦察机',cost:520,time:5.2,speed:10.2,vision:12,health:80,building:'airport'},
+  helicopter:{label:'运输直升机',cost:740,time:7,speed:6.2,vision:6.8,health:115,building:'airport'},
 };
 const TECHNOLOGIES={
   pulse:{label:'脉冲增幅',unit:'pulseTank',description:'解锁脉冲炮车，对装甲目标增强伤害'},
@@ -175,6 +181,9 @@ const UNIT_ART = {
   cavalry:{bracket:15,hitWidth:17,hitHeight:42,small:true},
   mountedCavalry:{bracket:33,hitWidth:36,hitHeight:58,small:true},
   fighter:{bracket:51,hitWidth:59,hitHeight:50},
+  bomber:{bracket:57,hitWidth:65,hitHeight:56},
+  reconPlane:{bracket:46,hitWidth:52,hitHeight:44},
+  helicopter:{bracket:49,hitWidth:52,hitHeight:39},
 };
 const COMBAT_INFANTRY = new Set(['soldier','rocketeer','mortar','cavalry','mountedCavalry']);
 const VEHICLE_CONTACT_RADIUS = {mcv:.58,miner:.54,tank:.49,pulseTank:.53,siegeTank:.53,artillery:.52};
@@ -182,7 +191,8 @@ const HEAVY_MOTION = {acceleration:4.5, braking:8, turnRate:4.5};
 const TRACKED_MOTION = {acceleration:6.5, braking:10, turnRate:7};
 const DOG_MOTION={acceleration:22,braking:25,turnRate:19};
 const FOOT_MOTION = {acceleration:14, braking:17, turnRate:15};
-const UNIT_RADIUS = {mcv:.46,miner:.43,tank:.42,soldier:.20,dog:.23,engineer:.20,rocketeer:.20,mortar:.20,pulseTank:.45,siegeTank:.45,artillery:.46,horse:.33,cavalry:.20,mountedCavalry:.36,fighter:.40};
+const UNIT_RADIUS = {mcv:.46,miner:.43,tank:.42,soldier:.20,dog:.23,engineer:.20,rocketeer:.20,mortar:.20,pulseTank:.45,siegeTank:.45,artillery:.46,horse:.33,cavalry:.20,mountedCavalry:.36,fighter:.40,
+  bomber:.50,reconPlane:.34,helicopter:.44};
 const AIR_TARGETING=new Set(['fighter','soldier','rocketeer','cavalry','mountedCavalry','sentry','bunker','laser']);
 const TEAM_PAINT = {
   player:{
@@ -527,6 +537,7 @@ function currentlyVisible(x,y) {
 }
 
 function canSeeEntity(faction,entity) {
+  if (entity.embarked) return false;
   if (entity.team===faction.team) return true;
   if (!entity.width) return faction.sight.has(tileUnder(entity.x,entity.y));
   for (let x=entity.x;x<entity.x+entity.width;x++) {
@@ -1963,8 +1974,34 @@ function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
   return true;
 }
 
+function drawTransportHelicopter(context,unit,origin,paint) {
+  const {bar,extrude,panel,line}=vehiclePainter(context,origin,unit.heading);
+  for (const side of [-1,1]) {
+    line([-.59,side*.37,1],[.65,side*.37,1],'#242e30',3);
+    for (const x of [-.39,.37]) line([x,side*.37,2],[x,side*.27,12],'#565f5e',2.2);
+  }
+  bar(-1.42,-.07,.93,.14,17,23,GUNMETAL);
+  bar(-1.36,-.052,.14,.104,21,39,paint.trim);
+  extrude([[-.63,-.38],[.37,-.38],[.68,-.23],[.78,0],[.68,.23],[.37,.38],[-.63,.38]],
+    8,31,paint.body,[[-.55,-.34],[.35,-.31],[.55,-.19],[.65,0],[.55,.19],[.35,.31],[-.55,.34]]);
+  for (const side of [-1,1]) {
+    panel([[.15,side*.331,26],[.47,side*.255,27],[.62,side*.19,19],[.15,side*.352,18]],'#20343c','#829b9e',.8,true);
+    line([-.54,side*.379,17],[-.04,side*.379,17],paint.light,1.6);
+  }
+  panel([[.52,-.18,28],[.52,.18,28],[.76,.12,17],[.76,-.12,17]],'#324c58','#899b9d',.8,true);
+  bar(-.19,-.17,.34,.34,29,36,paint.trim);
+  bar(-.04,-.04,.08,.08,34,46,GUNMETAL);
+  const angle=reducedMotion.matches?.24:lastFrame*.017;
+  for (let i=0;i<2;i++) {
+    const heading=angle+i*Math.PI/2;
+    const x=Math.cos(heading)*1.16,y=Math.sin(heading)*1.16;
+    line([-x,-y,45],[x,y,45],'#313a3bd0',2.2);
+  }
+}
+
 function renderUnit(context,unit,origin) {
   const paint=TEAM_PAINT[unit.team];
+  if (unit.type==='helicopter') return drawTransportHelicopter(context,unit,origin,paint);
   const hostile=unit.team==='enemy';
   const wheeled=Boolean(VEHICLE_CONTACT_RADIUS[unit.type]);
   const dog=unit.type==='dog';
@@ -1978,11 +2015,12 @@ function renderUnit(context,unit,origin) {
   const forward=project(Math.cos(unit.heading),Math.sin(unit.heading));
   const angle=Math.atan2(forward.y,Math.abs(forward.x));
   const facing=angle<-.22?2:angle<.22?0:angle>1.02?3:1;
-  const width=unitSpriteWidths[unit.type][facing];
+  const spriteType=isAirborne(unit)?'fighter':unit.type;
+  const width=unitSpriteWidths[spriteType][facing]*(unit.type==='bomber'?1.15:unit.type==='reconPlane'?.80:1);
   const offset=wheeled?[12,25,20,31][facing]:quadruped?[3,8,6,8][facing]:2;
   const mirror=forward.x<0 && facing!==3;
   if (unit.type==='tank' && drawTankAssembly(context,unit,origin,facing,mirror,strength)) return;
-  const image=sprites.get(unit.type+'-'+facing+'-'+factionTint(unit.team));
+  const image=sprites.get(spriteType+'-'+facing+'-'+factionTint(unit.team));
   if (image?.naturalWidth) {
     const height=width*image.naturalHeight/image.naturalWidth;
     const bodyBob=wheeled?Math.sin(travel*14)*.48*strength:0;
@@ -3061,7 +3099,7 @@ function segmentDistanceSquared(x,y,dx,dy) {
 }
 
 function unitPositionBlocked(unit,x,y,allowRunOver=false,candidates=units) {
-  return candidates.some(other=>other!==unit && !(other.health<=0) && isAirborne(unit)===isAirborne(other) &&
+  return candidates.some(other=>other!==unit && !(other.health<=0) && collisionLayerMatches(unit,other) &&
     !(allowRunOver && canRunOver(unit,other)) &&
     Math.hypot(x-other.x,y-other.y)<UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type]);
 }
@@ -3074,7 +3112,7 @@ function blockingUnit(unit,fromX,fromY,toX,toY,candidates=units) {
   const dx=toX-fromX, dy=toY-fromY;
   if (!dx && !dy) return null;
   for (const other of candidates) {
-    if (other===unit || other.health<=0 || isAirborne(unit)!==isAirborne(other) || canRunOver(unit,other)) continue;
+    if (other===unit || other.health<=0 || !collisionLayerMatches(unit,other) || canRunOver(unit,other)) continue;
     const x=other.x-fromX, y=other.y-fromY;
     const radius=UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type];
     // Let units separate if an existing overlap would otherwise trap them.
@@ -3127,17 +3165,152 @@ function runOverInfantry(vehicle,fromX,fromY,radius) {
 }
 
 function isAirborne(unit) {
-  return unit.type==='fighter';
+  return AIRCRAFT_TYPES.has(unit.type);
+}
+
+function collisionLayerMatches(unit,other) {
+  const air=isAirborne(unit);
+  return air===isAirborne(other) && (!air || Math.abs((unit.altitude??0)-(other.altitude??0))<24);
 }
 
 function unitElevation(unit) {
   return isAirborne(unit)?(unit.altitude??JET_ALTITUDE):heightAt(unit.x,unit.y);
 }
 
-function navigateFighter(unit,dt) {
-  unit.altitude=Math.min(JET_ALTITUDE,(unit.altitude??JET_ALTITUDE)+dt*115);
+function airfieldReady(airport,team) {
+  return airport?.type==='airport' && airport.team===team && airport.health>0 &&
+    airport.remaining===0 && structures.includes(airport);
+}
+
+function airfieldParking(airport,unit) {
+  const center=yardCenter(airport);
+  const grounded={type:unit.type,altitude:0};
+  for (const [dx,dy] of [[-1.05,.77],[1.05,.77],[-1.05,-.77],[1.05,-.77]]) {
+    const point={x:center.x+dx,y:center.y+dy};
+    if (!onMap(point.x,point.y)) continue;
+    const taken=units.some(other=>other!==unit && other.health>0 && (
+      other.goal?.kind==='land' && sameTile(other.goal,point) ||
+      collisionLayerMatches(grounded,other) && distanceTo(other,point)<UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type]));
+    if (!taken) return point;
+  }
+  return null;
+}
+
+function setFlightCourse(unit,{x,y},kind) {
+  unit.route=distanceTo(unit,{x,y})<.02?[]:[{x,y}];
+  unit.goal={x,y,kind};
+  unit.orbit=null;
+}
+
+function returnBomber(unit) {
+  unit.attackTarget=null;
+  unit.engaged=false;
+  unit.route=[];
+  unit.goal=null;
+  unit.mode='returning';
+  unit.nextLandingCheck=0;
+}
+
+function findBomberLanding(unit) {
+  if (game.time<(unit.nextLandingCheck??0)) return;
+  unit.nextLandingCheck=game.time+.6;
+  const bases=structures.filter(base=>airfieldReady(base,unit.team))
+    .sort((a,b)=>Number(b===unit.airbase)-Number(a===unit.airbase) ||
+      distanceTo(unit,yardCenter(a))-distanceTo(unit,yardCenter(b)));
+  for (const base of bases) {
+    const parking=airfieldParking(base,unit);
+    if (!parking) continue;
+    unit.airbase=base;
+    setFlightCourse(unit,parking,'land');
+    break;
+  }
+}
+
+function canTransport(carrier,unit) {
+  return carrier.team===unit.team && unit.health>0 &&
+    (unit.type==='dog' || isPersonnel(unit) && unit.type!=='mountedCavalry');
+}
+
+function boardTransport(carrier,unit) {
+  const index=units.indexOf(unit);
+  if (index<0 || carrier.type!=='helicopter' || carrier.health<=0 ||
+      !canTransport(carrier,unit) || distanceTo(carrier,unit)>2.4 ||
+      (carrier.altitude??0)>2 || carrier.passengers.length>=HELICOPTER_CAPACITY) return false;
+  clearAttackOrder(unit);
+  unit.captureTarget=null;
+  unit.rescueTarget=null;
+  unit.mountTarget=null;
+  unit.velocity=0;
+  unit.embarked=true;
+  units.splice(index,1);
+  carrier.passengers.push(unit);
+  if (game.selection.includes(unit)) select(game.selection.filter(member=>member!==unit));
+  return true;
+}
+
+function unloadTransport(carrier) {
+  if (game.time<(carrier.nextUnload??0)) return;
+  carrier.nextUnload=game.time+.24;
+  const x=Math.round(carrier.x),y=Math.round(carrier.y);
+  const explored=FACTIONS[carrier.team].explored;
+  const spaces=[];
+  for (let dx=-2;dx<=2;dx++) {
+    for (let dy=-2;dy<=2;dy++) {
+      const position={x:x+dx,y:y+dy};
+      if (explored.has(tileKey(position.x,position.y)) && walkable(position.x,position.y)) spaces.push(position);
+    }
+  }
+  spaces.sort((a,b)=>distanceTo(carrier,a)-distanceTo(carrier,b));
+  let count=0;
+  while (carrier.passengers.length) {
+    const passenger=carrier.passengers[0];
+    const site=spaces.findIndex(point=>!unitPositionBlocked(passenger,point.x,point.y));
+    if (site<0) break;
+    const [position]=spaces.splice(site,1);
+    Object.assign(passenger,position);
+    delete passenger.embarked;
+    units.push(carrier.passengers.shift());
+    count++;
+  }
+  if (count) log(factionName(carrier.team)+'运输直升机已卸载 '+count+' 个单位。',carrier.team);
+}
+
+function navigateAircraft(unit,dt) {
+  if (unit.type==='bomber') {
+    const hasBase=airfieldReady(unit.airbase,unit.team);
+    if (unit.mode==='parked') {
+      if (hasBase) return;
+      returnBomber(unit);
+    }
+    if (unit.mode==='returning') {
+      if (unit.goal?.kind==='land' && !hasBase) returnBomber(unit);
+      if (!unit.goal) findBomberLanding(unit);
+    }
+  }
+  const helicopter=unit.type==='helicopter';
+  const landing=unit.goal?.kind==='land' || helicopter &&
+    (!unit.goal || unit.goal.kind==='pickup' || unit.goal.kind==='drop');
+  const ceiling=helicopter?62:JET_ALTITUDE;
   const target=unit.route[0];
+  const altitude=unit.altitude??ceiling;
+  const desired=landing?Math.min(ceiling,target?distanceTo(unit,target)*20:0):ceiling;
+  unit.altitude=Math.max(altitude-dt*110,Math.min(desired,altitude+dt*115));
   if (!target) {
+    if (landing) {
+      if (unit.altitude>0) return;
+      if (unit.type==='bomber') {
+        unit.mode='parked';
+        unit.readyForSortie=game.time+3;
+        log(factionName(unit.team)+'轰炸机已返回机场。',unit.team);
+      } else if (unit.goal?.kind==='drop' || unit.passengers.length) {
+        unloadTransport(unit);
+        if (unit.passengers.length) return;
+        unit.mode='idle';
+      } else unit.mode='idle';
+      unit.goal=null;
+      return;
+    }
+    if (unit.goal?.kind==='bomb') return;
     if (unit.goal) arrive(unit);
     const angle=unit.heading-Math.PI/2;
     const radius=1.45;
@@ -3166,7 +3339,7 @@ function navigateFighter(unit,dt) {
   }
   unit.x=x;
   unit.y=y;
-  if (!unit.route.length && unit.goal) arrive(unit);
+  if (!unit.route.length && unit.goal && !landing && unit.goal.kind!=='bomb') arrive(unit);
 }
 
 function motionFor(unit) {
@@ -3320,7 +3493,7 @@ function recordTravel(unit,distance,dt,turn=0) {
 function navigate(unit,dt) {
   if (unit.health<=0 || dt<=0) return;
   if (isAirborne(unit)) {
-    navigateFighter(unit,dt);
+    navigateAircraft(unit,dt);
     return;
   }
   if (unit.captureTarget && !canCapture(unit,unit.captureTarget)) {
@@ -3704,16 +3877,24 @@ function sendToRally(unit,building) {
 }
 
 function spawnUnit(building,type) {
-  const air=type==='fighter';
+  const air=AIRCRAFT_TYPES.has(type);
+  const parked=type==='bomber' || type==='helicopter';
+  const aircraft={type,team:building.team};
   const launch=air?yardCenter(building):null;
-  const spawn=air?(unitPositionBlocked({type,team:building.team},launch.x,launch.y)?null:launch):
+  const spawn=parked?airfieldParking(building,aircraft):
+    air?(unitPositionBlocked(aircraft,launch.x,launch.y)?null:launch):
     spawnPoint(building,true,{type,team:building.team});
   if (!spawn) return false;
   const spec=PRODUCTS[type];
   const speed=spec.speed;
   const unit={...spawn,team:building.team,type,id:nextUnitId++,label:spec.label,speed,
     vision:spec.vision,heading:Math.PI/2,mode:'idle',route:[],goal:null};
-  if (air) unit.altitude=12;
+  if (air) unit.altitude=parked?0:12;
+  if (type==='bomber') {
+    unit.airbase=building;
+    unit.mode='parked';
+  }
+  if (type==='helicopter') unit.passengers=[];
   if (type==='mcv') unit.expansion=true;
   if (type==='miner') {
     unit.cargo=0;
@@ -3805,6 +3986,8 @@ function advanceProduction(dt) {
     job.remaining=Math.max(0,job.remaining-dt*productionRate(building));
     if (job.remaining>0 || !spawnUnit(building,job.type)) continue;
     building.queue.shift();
+    const orders=FACTIONS[building.team].priorityAircraft;
+    if (orders?.[0]===job.type) orders.shift();
     playAt('ready',yardCenter(building),building);
     log(factionName(building.team)+PRODUCTS[job.type].label+'已完成生产。',building.team);
   }
@@ -4171,7 +4354,8 @@ function directAiArmy(faction,army,buildings,intelligence,raid) {
       }
     }
     const plan=faction.commander.plan;
-    if (!scout && faction.orders.mode==='develop' && plan?.task==='recon' && !available.includes(plan.scout)) {
+    if (!scout && faction.orders.mode==='develop' && plan?.task==='recon' && !available.includes(plan.scout) &&
+        !(plan.scout?.type==='reconPlane' && units.includes(plan.scout))) {
       plan.scout=dispatchScouts(faction,remaining,plan.target,'scout');
     }
     if (plan?.task==='capture' && remaining.length>=3 && !remaining.includes(plan.scout) &&
@@ -4593,19 +4777,80 @@ function advanceMounts(faction,members) {
   }
 }
 
-function reserveForPriorityFighter(faction,yards,airport,members) {
-  if (!faction.priorityFighter) return false;
-  if (members.some(isAirborne)) {
-    delete faction.priorityFighter;
-    return false;
-  }
-  if (airport) {
-    if (airport.queue.some(job=>job.type==='fighter')) return false;
-    if (airport.remaining===0 && enqueue(airport,'fighter')) {
-      log(factionName(faction.team)+'机场开始生产优先调度的战斗机。',faction.team);
-      return false;
+function transportDropPoint(carrier,objective,faction) {
+  const distance=distanceTo(carrier,objective);
+  if (distance<7) return null;
+  const x=Math.round(mix(objective.x,carrier.x,4/distance));
+  const y=Math.round(mix(objective.y,carrier.y,4/distance));
+  const candidates=[];
+  for (let dx=-2;dx<=2;dx++) {
+    for (let dy=-2;dy<=2;dy++) {
+      const point={x:x+dx,y:y+dy};
+      if (distanceTo(point,objective)<3 || !faction.explored.has(tileKey(point.x,point.y)) ||
+          !walkable(point.x,point.y) || unitPositionBlocked(carrier,point.x,point.y)) continue;
+      candidates.push(point);
     }
-    return true;
+  }
+  return candidates.sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y))[0]??null;
+}
+
+function directSpecialAircraft(faction,members,intelligence,raid) {
+  const {contacts,frontier}=intelligence;
+  const {mode,task,target}=faction.orders;
+  const assigned=mode==='assault' && contacts.includes(target)?target:null;
+  const raider=raid?.critical && contacts.includes(raid.attacker)?raid.attacker:null;
+  const groundTarget=[assigned,raider].find(contact=>contact && !isAirborne(contact));
+  const strikeOrder=groundTarget===assigned?(faction.commander.plan??assigned):raid;
+  const objective=groundTarget?(groundTarget.width?yardCenter(groundTarget):groundTarget):
+    raid?.critical?raid.point:task==='advance'?faction.commander.plan?.point:null;
+  for (const aircraft of members) {
+    if (aircraft.type==='reconPlane') {
+      if (aircraft.goal) continue;
+      const plan=faction.commander.plan;
+      if (plan?.task==='recon' && sendScout(aircraft,plan.target,'scout')) {
+        faction.searched.set(plan.target,game.time);
+        plan.scout=aircraft;
+      } else searchBattlefield(faction,aircraft,frontier,'scout');
+    } else if (aircraft.type==='bomber') {
+      if (groundTarget && aircraft.mode==='parked' && aircraft.lastStrikeOrder!==strikeOrder &&
+          orderAttack([aircraft],groundTarget)) aircraft.lastStrikeOrder=strikeOrder;
+    } else if (aircraft.type==='helicopter' && objective && !aircraft.goal && !aircraft.passengers.length) {
+      const drop=transportDropPoint(aircraft,objective,faction);
+      if (!drop) continue;
+      const candidates=members.filter(unit=>canTransport(aircraft,unit) && !unit.engaged && !unit.captureTarget &&
+        distanceTo(unit,objective)>7).sort((a,b)=>distanceTo(a,aircraft)-distanceTo(b,aircraft));
+      if (!candidates.length) continue;
+      for (const unit of candidates) {
+        if (distanceTo(aircraft,unit)>2.4 || aircraft.passengers.length>=HELICOPTER_CAPACITY) break;
+        boardTransport(aircraft,unit);
+      }
+      if (aircraft.passengers.length) {
+        setFlightCourse(aircraft,drop,'drop');
+        aircraft.mode='transporting';
+        log(factionName(aircraft.team)+'运输直升机搭载 '+aircraft.passengers.length+' 个单位起飞。',aircraft.team);
+      } else if ((aircraft.altitude??0)<=2) {
+        const passenger=candidates[0];
+        setFlightCourse(aircraft,{x:passenger.x,y:passenger.y},'pickup');
+        aircraft.mode='pickup';
+      }
+    }
+  }
+}
+
+function reserveForPriorityAircraft(faction,yards,airport,members,hasIncome) {
+  const orders=faction.priorityAircraft;
+  while (orders?.length && members.some(unit=>unit.type===orders[0])) orders.shift();
+  if (orders && !orders.length) delete faction.priorityAircraft;
+  if (faction.priorityFighter && members.some(unit=>unit.type==='fighter')) delete faction.priorityFighter;
+  const type=orders?.[0]??(faction.priorityFighter?'fighter':null);
+  if (!type) return false;
+  if (airport) {
+    if (airport.queue.length) return Boolean(orders?.length);
+    if (airport.remaining===0 && enqueue(airport,type)) {
+      log(factionName(faction.team)+'机场开始生产优先调度的'+PRODUCTS[type].label+'。',faction.team);
+      return Boolean(orders?.length);
+    }
+    return hasIncome;
   }
   const ready=yards.filter(yard=>readyYard(yard,faction.team));
   if (!ready.length) return false;
@@ -4613,7 +4858,7 @@ function reserveForPriorityFighter(faction,yards,airport,members) {
     faction.nextAirportSiteCheck=game.time+2;
     ready.some(yard=>placeAiBuilding({type:'airport',x:5,y:-4},yard,faction.team));
   }
-  return true;
+  return hasIncome;
 }
 
 function advanceFaction(faction) {
@@ -4637,12 +4882,15 @@ function advanceFaction(faction) {
   const intelligence=scoutBattlefield(faction);
   assessStrength(faction,army,intelligence.contacts,yard??factory??barracks??refinery);
   const raid=urgentRaid(faction,intelligence.contacts);
-  const reservingFighter=reserveForPriorityFighter(faction,yards,airport,members);
-  const rushingDefenses=!reservingFighter && raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
+  const hasIncome=Boolean(refinery && (refinery.pendingGift || members.some(unit=>unit.type==='miner'))) ||
+    buildings.some(building=>building.type==='oil');
+  const reservingAircraft=reserveForPriorityAircraft(faction,yards,airport,members,hasIncome);
+  const rushingDefenses=!reservingAircraft && raid?.critical && rushDefenses(faction,yards,buildings,intelligence.contacts,raid);
   if (!raid?.critical) advanceMounts(faction,members);
   reviewCommander(faction,army,buildings,members,intelligence,raid);
-  directAiArmy(faction,army,buildings,intelligence,raid);
-  if (reservingFighter) {
+  directSpecialAircraft(faction,members,intelligence,raid);
+  directAiArmy(faction,army.filter(unit=>unit.type!=='bomber' && !unit.embarked),buildings,intelligence,raid);
+  if (reservingAircraft) {
     advanceAiCapture(faction,barracks,members,false);
     return;
   }
@@ -4667,7 +4915,11 @@ function advanceFaction(faction) {
     placeAiBuilding(nextBase,yard,team);
   }
   const plan=faction.commander.plan;
-  const aircraft=members.filter(isAirborne).length;
+  const aircraft=members.filter(isAirborne);
+  const airProduct=!aircraft.some(unit=>unit.type==='reconPlane') && intelligence.frontier.length && !intelligence.contacts.length?
+    'reconPlane':!aircraft.some(unit=>unit.type==='bomber') && intelligence.contacts.some(contact=>contact.width)?
+    'bomber':!aircraft.some(unit=>unit.type==='fighter')?'fighter':
+    !aircraft.some(unit=>unit.type==='helicopter')?'helicopter':'fighter';
   const developingAir=plan?.task==='airpower' && !raid?.critical && !faction.defensive;
   if (developingAir && !airport && yard?.remaining===0 && !nextBase &&
       faction.credits>=BUILDINGS.airport.cost+PRODUCTS.soldier.cost) {
@@ -4676,10 +4928,10 @@ function advanceFaction(faction) {
     }
   }
   if (!raid?.critical && !faction.defensive && airport?.remaining===0 && !airport.queue.length &&
-      aircraft<(army.length>=6?2:1) && (developingAir || faction.credits>=PRODUCTS.fighter.cost+450)) {
-    enqueue(airport,'fighter');
+      aircraft.length<(army.length>=6?3:1) && (developingAir || faction.credits>=PRODUCTS[airProduct].cost+450)) {
+    enqueue(airport,airProduct);
   }
-  const savingForAir=developingAir && !aircraft && !airport?.queue.length;
+  const savingForAir=developingAir && !aircraft.length && !airport?.queue.length;
   if (!raid?.critical && !faction.defensive && plan?.task==='industry' && factories.length<plan.goal &&
       faction.credits>=BUILDINGS.factory.cost+PRODUCTS.tank.cost) {
     if (yards.some(base=>readyYard(base,team) && placeAiBuilding({type:'factory',x:-5,y:-3},base,team))) {
@@ -4778,6 +5030,15 @@ function orderAttack(members,target,automatic=false) {
   for (const unit of members) {
     if (!WEAPONS[unit.type] || unit.team===target.team || !canAttackTarget(unit,target) ||
         !canSeeEntity(FACTIONS[unit.team],target)) continue;
+    if (unit.type==='bomber') {
+      if (automatic || unit.mode!=='parked' || game.time<(unit.readyForSortie??0) || target.team==='neutral') continue;
+      unit.attackTarget=target;
+      unit.mode='bombing';
+      setFlightCourse(unit,targetPoint(unit,target),'bomb');
+      log(factionName(unit.team)+'轰炸机出动，目标为'+(target.width?buildingSpec(target.type).label:target.label)+'。',unit.team);
+      ordered++;
+      continue;
+    }
     unit.attackTarget=target;
     unit.automaticAttack=automatic;
     unit.nextApproach=0;
@@ -4868,6 +5129,7 @@ function armoredTarget(target) {
 }
 
 function canAttackTarget(attacker,target) {
+  if (attacker.type==='reconPlane' || attacker.type==='helicopter') return false;
   return !isAirborne(target) || AIR_TARGETING.has(attacker.type);
 }
 
@@ -4920,7 +5182,8 @@ function fireWeapon(attacker,from,weapon,target,hits) {
       projectGround(point.x,point.y,height);
     shots.push({from:origin,to:impact,time:game.time,type:effect,team:attacker.team,witnesses});
     if (ENGINE_ONLY || witnesses.includes(game.perspective)) {
-      const cue={dog:'bark',bullet:'rifle',mortar:'mortar',artillery:'mortar',rocket:'rocket',laser:'laser'}[effect]??'cannon';
+      const cue={dog:'bark',bullet:'rifle',mortar:'mortar',artillery:'mortar',rocket:'rocket',
+        bomb:'explosion',laser:'laser'}[effect]??'cannon';
       playAt(cue,from,attacker);
     }
   }
@@ -4936,12 +5199,35 @@ function fireWeapon(attacker,from,weapon,target,hits) {
       hits.push({target:other,attacker,damage:damageAfterDefense(other,splash)});
     }
   }
+  return true;
+}
+
+function advanceBombSortie(unit,hits) {
+  const target=unit.attackTarget;
+  if (unit.mode!=='bombing') return;
+  if (!target || target.health<=0 || target.team===unit.team || target.team==='neutral' ||
+      !canAttackTarget(unit,target) || !canSeeEntity(FACTIONS[unit.team],target)) {
+    returnBomber(unit);
+    return;
+  }
+  const weapon=WEAPONS.bomber;
+  if (inWeaponRange(unit,target,weapon) && unitElevation(unit)>=JET_ALTITUDE*.70) {
+    if (fireWeapon(unit,unit,weapon,target,hits)) {
+      returnBomber(unit);
+      log(factionName(unit.team)+'轰炸机已投弹，正在返航。',unit.team);
+    }
+    return;
+  }
+  const point=targetPoint(unit,target);
+  if (!unit.goal || distanceTo(unit.goal,point)>.65) setFlightCourse(unit,point,'bomb');
 }
 
 function advanceCombat(dt=.04) {
   if (game.outcome) return;
   const mobile=units.filter(unit=>unit.health>0);
   const fighters=mobile.filter(unit=>WEAPONS[unit.type]);
+  const regularFighters=fighters.filter(unit=>unit.type!=='bomber');
+  const combatTargets=mobile.filter(unit=>WEAPONS[unit.type] || isAirborne(unit));
   const infantry=mobile.filter(isPersonnel);
   const engineers=mobile.filter(unit=>unit.type==='engineer');
   for (const dog of fighters) {
@@ -4951,12 +5237,13 @@ function advanceCombat(dt=.04) {
     const prey=nearestOpponent(dog,known,WEAPONS.dog.pursuit);
     if (prey) orderAttack([dog],prey,true);
   }
-  advanceAttackOrders(fighters);
+  advanceAttackOrders(regularFighters);
   const hits=[];
-  for (const unit of fighters) {
+  for (const unit of fighters) if (unit.type==='bomber') advanceBombSortie(unit,hits);
+  for (const unit of regularFighters) {
     const weapon=WEAPONS[unit.type];
     const faction=FACTIONS[unit.team];
-    const candidates=unit.type==='dog'?infantry:fighters;
+    const candidates=unit.type==='dog'?infantry:combatTargets;
     const eligible=candidates.filter(target=>target.team!==unit.team && canAttackTarget(unit,target) && canSeeEntity(faction,target) &&
       (!weapon.minimum || inWeaponRange(unit,target,weapon)));
     const ordered=unit.attackTarget;
@@ -5142,9 +5429,10 @@ function drawCombat() {
     }
     const artillery=type==='artillery';
     const curved=type==='mortar' || artillery;
-    const explosive=type==='tank' || type==='rocket' || curved || type==='pulse';
-    const flight=artillery?.29:type==='mortar'?.19:type==='rocket'?.15:.08;
-    const lifetime=artillery?.42:.28;
+    const bomb=type==='bomb';
+    const explosive=type==='tank' || type==='rocket' || curved || type==='pulse' || bomb;
+    const flight=artillery?.29:bomb?.22:type==='mortar'?.19:type==='rocket'?.15:.08;
+    const lifetime=(artillery || bomb) ? .42 : .28;
     if (age>=lifetime) continue;
     if (type!=='dog' && age<flight+.035) {
       const rate=Math.min(1,age/flight);
@@ -5159,7 +5447,7 @@ function drawCombat() {
       ctx.globalAlpha=Math.max(0,1-(age-flight)/(lifetime-flight));
       ctx.fillStyle=type==='pulse'?'#c4f9fc':explosive?'#ffbf70':'#ffdcb0';
       ctx.beginPath();
-      ctx.arc(to.x,to.y,(artillery?17:curved?12:explosive?5:2)+(age-flight)*17,0,Math.PI*2);
+      ctx.arc(to.x,to.y,(artillery || bomb?17:curved?12:explosive?5:2)+(age-flight)*17,0,Math.PI*2);
       ctx.fill();
     }
   }
@@ -5299,7 +5587,7 @@ function syncBuildMenu() {
   } else if (building.type==='refinery') {
     status='矿车返厂卸矿';
   } else if (building.type==='airport') {
-    status='生产战斗机';
+    status='生产战斗机、轰炸机、侦察机和运输直升机';
   } else if (building.type==='yard') {
     status='建造半径 '+BUILD_RADIUS+' 格';
   }
@@ -5401,7 +5689,18 @@ function syncHud() {
   byId('cargo-panel').hidden=unit?.type!=='miner';
   let mode='';
   if (unit) {
-    if (unit.type==='miner' && unit.mode==='idle' && unit.autoMine && !unit.attackTarget && !unit.engaged) {
+    if (unit.type==='bomber' && unit.mode==='returning') {
+      mode='返航中';
+    } else if (unit.type==='bomber' && unit.mode==='parked') {
+      mode='机场待命';
+    } else if (unit.type==='bomber' && unit.mode==='bombing') {
+      mode='飞往指定轰炸目标';
+    } else if (unit.type==='helicopter') {
+      const task=unit.mode==='pickup'?'飞往接载点':unit.mode==='transporting'?'运送中':'待命';
+      mode=unit.passengerCount==null?task:task+' · 载员 '+unit.passengerCount+'/'+HELICOPTER_CAPACITY;
+    } else if (unit.type==='reconPlane') {
+      mode='航空侦察';
+    } else if (unit.type==='miner' && unit.mode==='idle' && unit.autoMine && !unit.attackTarget && !unit.engaged) {
       mode=unit.cargo>=CARGO_LIMIT-.001?'等待卸矿':'寻找矿脉';
     } else {
       mode=unit.engaged?'交战中':unit.goal?.kind==='scout'?'侦察中':unit.goal?.kind==='retreat'?'回撤中':unit.goal?.kind==='expand'?'前往部署':unit.goal?.kind==='mount'?'前往上马':unit.goal?.kind==='reinforce'?'驰援中':unit.attackTarget?'进攻中':unit.captureTarget?'前往占领':

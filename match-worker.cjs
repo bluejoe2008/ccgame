@@ -158,8 +158,11 @@ function observation(team) {
     ...matchInfo(), team, explored, ore, strategy, sight: [...view.sight],
     scents: [...view.scentTargets].map(visibleId).filter(Boolean),
     units: seenUnits.map(unit => ({
-      ...pick(unit, unitKeys), viewId: entityId(unit), goal: unit.goal ? pick(unit.goal, ['x','y','kind']) : null,
+      ...pick(unit, unitKeys), viewId: entityId(unit),
+      goal: unit.goal && (unit.team === team || !['bomber','reconPlane','helicopter'].includes(unit.type))
+        ? pick(unit.goal, ['x','y','kind']) : null,
       route: unit.team === team ? unit.route : [],
+      passengerCount: unit.team === team && unit.passengers ? unit.passengers.length : null,
       attackId: visibleId(unit.attackTarget), captureId: visibleId(unit.captureTarget), scentId: visibleId(unit.scentTarget),
     })),
     buildings: seenBuildings.map(building => ({

@@ -4,7 +4,7 @@ const COMMAND_TASKS={
   mine:{label:'扩充矿车编队',mode:'develop',duration:36},
   power:{label:'恢复供电',mode:'develop',duration:28},
   industry:{label:'扩建兵工厂',mode:'develop',duration:34},
-  airpower:{label:'建设机场并部署战斗机',mode:'develop',duration:60},
+  airpower:{label:'建设机场并部署飞机',mode:'develop',duration:60},
   mobilize:{label:'训练增援',mode:'develop',duration:30},
   recon:{label:'侦察前沿',mode:'develop',duration:26},
   advance:{label:'向敌区推进',mode:'assault',duration:42},
@@ -136,9 +136,10 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     add('industry',factories===1?88:72,null,'industry',null,factories+1);
   }
   const hasAirport=buildings.some(building=>building.type==='airport');
+  const aircraft=members.filter(isAirborne).length;
   if (!underPressure && yards && factories && barracks && fleet.active>=2 &&
-      army.length>=3 && !army.some(isAirborne) && power>=72 &&
-      faction.credits>=(hasAirport?PRODUCTS.fighter.cost*.6:BUILDINGS.airport.cost*.75)) {
+      army.length>=3 && !aircraft && power>=72 &&
+      faction.credits>=(hasAirport?PRODUCTS.reconPlane.cost*.6:BUILDINGS.airport.cost*.75)) {
     add('airpower',hasAirport?85:faction.strategy==='aggressive'?79:69,null,'airpower');
   }
   if (factories || barracks) add('mobilize',underPressure?96:army.length<3?86:40,null,'reserve',null,army.length+2);
@@ -151,7 +152,8 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     add('research',faction.credits>=1400 && army.length>=6?78:58,null,'research',null,faction.discoveries.size+1);
   }
 
-  const scouts=army.filter(unit=>!unit.attackTarget);
+  const scouts=members.filter(unit=>!unit.attackTarget &&
+    (unit.type==='reconPlane' || unit.type!=='bomber' && isArmyType(unit.type)));
   if (scouts.length) {
     const lead=faction.commander.scoutLead;
     const findLead=lead && lead.until>game.time;
@@ -228,16 +230,16 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
     if (waypoint) add('advance',108,waypoint,'frontier',waypoint);
   }
   if (!options.length) add('mobilize',0,null,'reserve',null,army.length+2);
-  return {options,contacts,fleet,power,defenses,army,buildings,campaignReady,
+  return {options,contacts,fleet,power,defenses,army,members,aircraft,buildings,campaignReady,
     snapshot:{
       personality:faction.strategy,
       situation:raid?.critical?'raided':faction.defensive?'outmatched':contacts.length?'contested':'clear',
       own:{credits:faction.credits,power,army:army.length,strength:Math.round(ownPower),
         miners:fleet.active,miners_ordered:fleet.ordered,ore:fleet.ore,
-        oil:count('oil'),factories,barracks,airports:count('airport'),aircraft:army.filter(isAirborne).length,
+        oil:count('oil'),factories,barracks,airports:count('airport'),aircraft,
         defenses,home_guard:homeGuard,home_threat:Math.round(homeThreat)},
       enemy:{armor:rivals.filter(armoredTarget).length,infantry:rivals.filter(isPersonnel).length,
-        aircraft:rivals.filter(isAirborne).length,
+        aircraft:contacts.filter(isAirborne).length,
         buildings:hostileBuildings.length,production:hostileProduction,power_plants:powerPlants.length,
         strength:Math.round(rivals.reduce((total,unit)=>total+combatPower(unit),0)),
         remembered:[...faction.reports.keys()].filter(unit=>!contacts.includes(unit)).length},
@@ -277,12 +279,12 @@ function evaluateCommand(faction,plan,battle) {
   if (task==='mine' && battle.fleet.active>=goal ||
       task==='power' && battle.power>=90 ||
       task==='industry' && battle.buildings.filter(b=>b.type==='factory' && !b.remaining).length>=goal ||
-      task==='airpower' && battle.army.some(isAirborne) ||
+      task==='airpower' && battle.aircraft>0 ||
       task==='mobilize' && battle.army.length>=goal ||
       task==='fortify' && battle.defenses>=goal ||
       task==='research' && faction.discoveries.size>=goal ||
       task==='capture' && battle.buildings.includes(target) ||
-      task==='recon' && battle.army.includes(plan.scout) && distanceTo(plan.scout,plan.point)<=2.1 ||
+      task==='recon' && battle.members.includes(plan.scout) && distanceTo(plan.scout,plan.point)<=2.1 ||
       task==='advance' && plan.marchers?.length && plan.marchers.filter(unit=>
         battle.army.includes(unit) && distanceTo(unit,plan.point)<3.5).length>=Math.min(2,plan.marchers.length) ||
       ['strike','intercept','harass'].includes(task) && (confirmed.has(target) || battle.buildings.includes(target))) {

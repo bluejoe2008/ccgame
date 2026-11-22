@@ -11,7 +11,7 @@ const displayedUnits = new Map();
 const displayedBuildings = new Map();
 const unitMotionSamples = new Map();
 const motionDelay = 220;
-const linearPoseFields = ['x','y','travel','stride','gaitCycles','lean'];
+const linearPoseFields = ['x','y','travel','stride','gaitCycles','lean','altitude'];
 const angularPoseFields = ['heading','turretHeading'];
 const poseFields = [...linearPoseFields,...angularPoseFields];
 
@@ -63,7 +63,7 @@ function updateObserverEntities(records, registry, destination, receivedAt) {
     const pose = {
       x:record.x, y:record.y, travel:record.travel ?? 0, stride:record.stride ?? 0,
       gaitCycles:record.gaitCycles ?? (record.type==='dog' ? (record.travel ?? 0)/1.34 : 0),
-      lean:record.lean ?? 0, heading:record.heading,
+      lean:record.lean ?? 0, altitude:record.altitude ?? 0, heading:record.heading,
       turretHeading:record.turretHeading ?? record.heading,
     };
     const continuous = last && entity.type === record.type && pose.travel >= last.pose.travel &&
@@ -237,7 +237,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=building-activity';
+  script.src = 'game.js?v=aircraft-missions';
   document.head.append(script);
 }
 bootObserver();
