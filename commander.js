@@ -44,7 +44,7 @@ function miningFleet(faction,buildings,members) {
     building.queue.filter(job=>job.type==='miner').length,0);
   let ore=0;
   for (const [key,amount] of deposits) {
-    if (amount<30 || !faction.sight.has(key)) continue;
+    if (amount<30) continue;
     const tile=faction.explored.get(key);
     if (tile && refineries.some(building=>distanceTo(tile,dockFor(building))<=13)) ore++;
   }
@@ -126,7 +126,7 @@ function observeBattle(faction,army,buildings,members,intelligence,raid) {
   for (const [target,point] of faction.commander.enemySites) {
     if (faction.commander.confirmedLosses.has(target) || buildings.includes(target) ||
         (usesTrainedPolicy(faction) && game.time-(point.seenAt??game.time)>65) ||
-        (faction.sight.has(tileUnder(point.x,point.y)) && !hostileBuildings.includes(target))) {
+        (faction.explored.has(tileUnder(point.x,point.y)) && !hostileBuildings.includes(target))) {
       faction.commander.enemySites.delete(target);
     }
   }

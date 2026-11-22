@@ -101,6 +101,7 @@ const shots=[];
 const wrecks=[];
 const movementDust=[];
 const groundImpacts=[];
+const oilRuins=[];
 const WEAPONS={
   tank:{health:150,defense:.18,range:4.45,damage:32,reload:1.22,height:28},
   miner:{health:170,defense:.12,range:3.2,damage:9,reload:.60,height:49},
@@ -239,7 +240,7 @@ function playAt(cue,point,source=point) {
     return;
   }
   if (!viewport.w || !viewport.h) return;
-  if (source.team!==game.perspective && !currentlyVisible(point.x,point.y)) return;
+  if (source.team!==game.perspective && !visible(point.x,point.y)) return;
   const dx=point.x-camera.x,dy=point.y-camera.y;
   const distance=Math.hypot(dx,dy);
   const level=1/(1+(distance/5.5)**1.65);
@@ -538,25 +539,21 @@ function visible(x,y) {
   return viewFaction().explored.has(tileUnder(x,y));
 }
 
-function currentlyVisible(x,y) {
-  return viewFaction().sight.has(tileUnder(x,y));
-}
-
 function canSeeEntity(faction,entity) {
   if (entity.embarked) return false;
   if (entity.team===faction.team) return true;
   if (entity.mode==='garage-repair') return false;
-  if (!entity.width) return faction.sight.has(tileUnder(entity.x,entity.y));
-  for (let x=entity.x;x<entity.x+entity.width;x++) {
-    for (let y=entity.y;y<entity.y+entity.height;y++) {
-      if (faction.sight.has(tileKey(x,y))) return true;
-    }
-  }
-  return false;
+  if (!entity.width) return faction.explored.has(tileUnder(entity.x,entity.y));
+  return knowsBuilding(faction,entity);
 }
 
 function knowsBuilding(faction,building) {
-  return footprint(building).some(tile=>faction.explored.has(tileKey(tile.x,tile.y)));
+  for (let x=building.x;x<building.x+building.width;x++) {
+    for (let y=building.y;y<building.y+building.height;y++) {
+      if (faction.explored.has(tileKey(x,y))) return true;
+    }
+  }
+  return false;
 }
 
 function structureVisible(building) {
@@ -617,7 +614,7 @@ function refreshVision(faction,members,buildings) {
   }
   sensePersonnel(faction,members.filter(unit=>unit.type==='dog'));
   for (const mark of groundImpacts) {
-    if (!mark.witnesses.includes(faction.team) && faction.sight.has(mark.key)) mark.witnesses.push(faction.team);
+    if (!mark.witnesses.includes(faction.team) && faction.explored.has(mark.key)) mark.witnesses.push(faction.team);
   }
 }
 
@@ -906,7 +903,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=training');
+      const worker=new Worker('terrain-worker.js?v=reconnaissance');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -2064,7 +2061,7 @@ function drawMovementDust() {
   if (reducedMotion.matches) return;
   for (const dust of movementDust) {
     const age=game.time-dust.time;
-    if (age>=.66 || !currentlyVisible(dust.x,dust.y)) continue;
+    if (age>=.66 || !visible(dust.x,dust.y)) continue;
     const progress=age/.66;
     const point=projectGround(dust.x+dust.dx*age,dust.y+dust.dy*age,1+progress*5);
     const radius=dust.radius+progress*6;
@@ -2703,10 +2700,16 @@ function drawWorld() {
     }
     const hostile=building.team==='enemy';
     const name=buildingCaption(building);
-    const label=pending?name+' '+progress+'%':name;
+    const label=pending?name+' '+progress+'%':building.serviceStatus==='坦克维修中'?name+' · 坦克维修中':name;
     tagLabel(ctx,p,label,hostile?'#ef987a':pending?'#e7c17d':
       building.team==='neutral'?'#e7c17d':
         (building===game.selectedBuilding || building.type==='oil')?'#c3eca1':'#aed4ec');
+  }
+  for (const {x,y} of oilRuins) {
+    if (x<range.x1 || x>range.x2 || y<range.y1 || y>range.y2) continue;
+    const point=project(x+(OIL_FIELD.width-1)/2,y+(OIL_FIELD.height-1)/2);
+    diamondAt(ctx,point,20,10,'#493e2c2e','#af9866',1.2);
+    tagLabel(ctx,{x:point.x,y:point.y-9},'油田遗址','#c5af86');
   }
   for (const hill of battlefield.hills) {
     if (visible(hill.x,hill.y)) tagLabel(ctx,projectGround(hill.x,hill.y,15),'山丘','#c7bd98');
@@ -2798,6 +2801,10 @@ function terrainRadar() {
     const color=building===game.selectedBuilding?'#dcfba5':building.team==='neutral'?
       buildingSpec(building.type).color:TEAM_PAINT[building.team].radar;
     polygon(radarCtx,structureOutline(building).map(([x,y])=>mapPoint(x,y)),color,null);
+  }
+  for (const {x,y} of oilRuins) {
+    const point=mapPoint(x+(OIL_FIELD.width-1)/2,y+(OIL_FIELD.height-1)/2);
+    diamondAt(radarCtx,point,2.4,1.6,null,'#bb9d6e',.7);
   }
   for (const unit of units) {
     if (!canSeeEntity(perspective,unit)) continue;
@@ -5647,7 +5654,7 @@ function noteGroundImpact({x,y},effect) {
   const key=tileUnder(x,y);
   const recent=groundImpacts.at(-1);
   if (recent?.key===key && game.time-recent.time<.32) return;
-  const witnesses=Object.values(FACTIONS).filter(faction=>faction.sight.has(key)).map(faction=>faction.team);
+  const witnesses=Object.values(FACTIONS).filter(faction=>faction.explored.has(key)).map(faction=>faction.team);
   groundImpacts.push({x,y,key,radius,time:game.time,witnesses});
   if (groundImpacts.length>260) groundImpacts.shift();
 }

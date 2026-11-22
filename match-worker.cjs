@@ -19,8 +19,8 @@ const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
   new vm.Script(fs.readFileSync(path.join(__dirname, name), 'utf8'), { filename: name }));
 
 const interfaceScript = new vm.Script(`({
-  game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites,
-  shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, oreCapacity, amountAt, tileUnder, finalizeOilOperations,
+  game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites, battlefield, OIL_FIELD,
+  shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, knowsBuilding, oreCapacity, amountAt, tileUnder, finalizeOilOperations,
   nextId() { return nextUnitId; },
   restore(saved) {
     for (const name of ['player','enemy']) FACTIONS[name] = saved.factions[name];
@@ -110,7 +110,7 @@ function initialise(description, saved = null) {
       log:addLog,
       sound(cue, point, source) {
         const audience = Object.values(engine.FACTIONS).filter(faction =>
-          faction.team === source.team || faction.sight.has(engine.tileUnder(point.x, point.y)))
+          faction.team === source.team || faction.explored.has(engine.tileUnder(point.x, point.y)))
           .map(faction => faction.team);
         if (!audience.length) return;
         const id = source.id ?? engine.tileUnder(source.x, source.y);
@@ -229,6 +229,10 @@ function observation(team) {
   const view = engine.FACTIONS[team];
   const seenUnits = engine.units.filter(unit => unit.health > 0 && engine.canSeeEntity(view, unit));
   const seenBuildings = engine.structures.filter(building => building.health > 0 && engine.canSeeEntity(view, building));
+  const {width:oilWidth,height:oilHeight}=engine.OIL_FIELD;
+  const oilRuins=engine.battlefield.oils.filter(({x,y})=>engine.knowsBuilding(view,{x,y,width:oilWidth,height:oilHeight}) &&
+    !engine.structures.some(building=>building.type==='oil' && building.health>0 && building.x===x && building.y===y))
+    .map(({x,y})=>({x,y}));
   const visible = new Set([...seenUnits, ...seenBuildings]);
   const visibleId = entity => visible.has(entity) ? entityId(entity) : null;
   const explored = [];
@@ -250,7 +254,7 @@ function observation(team) {
     plan: plan ? { ...pick(plan, planKeys), followup: plan.followup ? pick(plan.followup, planKeys) : null } : null,
   };
   return {
-    ...matchInfo(), team, explored, ore, strategy, sight: [...view.sight],
+    ...matchInfo(), team, explored, ore, oilRuins, strategy, sight: [...view.sight],
     scents: [...view.scentTargets].map(visibleId).filter(Boolean),
     units: seenUnits.map(unit => ({
       ...pick(unit, unitKeys), viewId: entityId(unit),
@@ -276,7 +280,7 @@ function observation(team) {
       .map(({ audience, ...event }) => event),
     shots: engine.shots.filter(shot => shot.witnesses.includes(team)),
     wrecks: engine.wrecks.filter(wreck => wreck.witnesses.includes(team)),
-    dust: engine.movementDust.filter(dust => view.sight.has(engine.tileUnder(dust.x,dust.y))),
+    dust: engine.movementDust.filter(dust => view.explored.has(engine.tileUnder(dust.x,dust.y))),
     impacts: engine.groundImpacts.filter(mark=>mark.witnesses.includes(team))
       .map(({x,y,radius,time})=>({x,y,radius,time})),
   };

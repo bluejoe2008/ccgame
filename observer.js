@@ -312,6 +312,7 @@ function applyObservation(snapshot) {
   wrecks.splice(0,wrecks.length,...snapshot.wrecks);
   movementDust.splice(0,movementDust.length,...snapshot.dust);
   groundImpacts.splice(0,groundImpacts.length,...(snapshot.impacts??[]));
+  oilRuins.splice(0,oilRuins.length,...(snapshot.oilRuins??[]));
   for (const entry of snapshot.logs) {
     if (entry.id <= lastLog) continue;
     log(entry.message,entry.team,entry.time);
@@ -361,7 +362,7 @@ function changeObserverPerspective(team,origin) {
   displayedUnits.clear();
   displayedBuildings.clear();
   unitMotionSamples.clear();
-  units.length = structures.length = shots.length = wrecks.length = movementDust.length = groundImpacts.length = 0;
+  units.length = structures.length = shots.length = wrecks.length = movementDust.length = groundImpacts.length = oilRuins.length = 0;
   byId('log').replaceChildren();
   lastLog = 0;
   lastSound = null;
@@ -432,7 +433,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=training';
+  script.src = 'game.js?v=reconnaissance';
   document.head.append(script);
 }
 bootObserver();

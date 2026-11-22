@@ -33,6 +33,20 @@ const BUILDING_THEMES={
     stacks:{diesel:[[.096,.092],[.19,.102]],refinery:[[.075,.022],[.167,.091]]},
     rotors:{oil:[.22,.62],diesel:[.72,.74]},
   },
+  qinhan:{
+    label:'秦汉古风', prefix:'qinhan-',
+    widths:{sentry:81,bunker:139,wall:60,laser:112,solar:139,recreation:140},
+    laser:{aspect:356/282,emitter:[.46,.27]},
+    lights:{
+      yard:[[.43,.49],[.51,.52]], factory:[[.44,.56],[.59,.61]], repairDepot:[[.39,.55],[.52,.66]],
+      refinery:[[.44,.57]], barracks:[[.32,.33],[.49,.37]],
+      airport:[[.04,.73],[.18,.54],[.47,.84],[.59,.91],[.82,.65]], solar:[[.18,.75]],
+      diesel:[[.23,.67],[.64,.64]], oil:[[.40,.42]], sentry:[[.48,.33]],
+      turret:[[.51,.43]], bunker:[[.47,.66]], recreation:[[.44,.60],[.57,.63]], training:[[.35,.69]],
+    },
+    stacks:{diesel:[[.253,.054],[.355,.024]],refinery:[[.139,.114],[.225,.154]]},
+    rotors:{oil:[.42,.42],diesel:[.633,.649]},
+  },
 };
 
 function hasBuildingTheme(theme) {
