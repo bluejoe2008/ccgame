@@ -237,7 +237,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=aircraft-missions';
+  script.src = 'game.js?v=tank-reference';
   document.head.append(script);
 }
 bootObserver();

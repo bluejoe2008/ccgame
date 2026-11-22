@@ -704,12 +704,21 @@ const unitSpriteWidths={
   fighter:[109,110,108,91],
 };
 const TANK_HULL_POSES=[
-  [89,.48,.32,17],[83,.49,.33,24],[87,.50,.31,20],[59,.50,.39,30],
+  {rect:[22,190,282,154],mount:[172,229],width:89,ground:17},
+  {rect:[336,148,268,217],mount:[478,225],width:83,ground:24},
+  {rect:[644,162,294,196],mount:[793,222],width:87,ground:20},
+  {rect:[998,142,185,215],mount:[1090,221],width:59,ground:30},
 ];
-// Width and mount point in each of the eight painted turret views, clockwise from east.
+// Atlas crops and their turntable pivots, clockwise from east.
 const TANK_TURRET_POSES=[
-  [80,.37,.89],[73,.41,.71],[48,.52,.64],[73,.68,.83],
-  [80,.72,.90],[72,.68,.86],[47,.55,.83],[72,.41,.86],
+  {rect:[18,545,306,121],mount:[98,638],width:91},
+  {rect:[348,505,274,208],mount:[434,615],width:80},
+  {rect:[708,489,152,263],mount:[785,610],width:46},
+  {rect:[946,506,277,207],mount:[1135,615],width:80},
+  {rect:[8,954,301,121],mount:[230,1048],width:91},
+  {rect:[337,901,262,193],mount:[510,1065],width:78},
+  {rect:[712,841,145,265],mount:[784,1077],width:45},
+  {rect:[959,900,268,193],mount:[1051,1064],width:78},
 ];
 const buildingSpriteWidths={yard:205,refinery:232,factory:205,barracks:163,airport:270,
   oil:148,sentry:82,turret:157,bunker:155,wall:56,laser:132,solar:147,diesel:199,recreation:152,training:201};
@@ -718,8 +727,7 @@ let poorOreArt=null;
 let groundTexture=null;
 if (!ENGINE_ONLY) {
 for (const tint of ['blue','red']) {
-  for (let i=0;i<TANK_HULL_POSES.length;i++) asset('tank-hull-'+i+'-'+tint);
-  for (let i=0;i<TANK_TURRET_POSES.length;i++) asset('tank-turret-'+i+'-'+tint);
+  asset('tank-reference-'+tint);
 }
 for (const type of Object.keys(unitSpriteWidths)) {
   for (let facing=0;facing<4;facing++) {
@@ -1941,21 +1949,18 @@ function drawIdlePose(context,image,width,height,phase,type) {
 }
 
 function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
-  const tint=factionTint(unit.team);
-  const hull=sprites.get('tank-hull-'+facing+'-'+tint);
+  const atlas=sprites.get('tank-reference-'+factionTint(unit.team));
+  if (!atlas?.naturalWidth) return false;
   const heading=unit.turretHeading??unit.heading;
   const direction=project(Math.cos(heading),Math.sin(heading));
   const screenAngle=Math.atan2(direction.y,direction.x);
   const octant=Math.PI/4;
   const step=Math.round(screenAngle/octant);
   const index=(step+8)%8;
-  const turret=sprites.get('tank-turret-'+index+'-'+tint);
-  if (!hull?.naturalWidth || !turret?.naturalWidth) return false;
-
-  const [width,ringX,ringY,ground]=TANK_HULL_POSES[facing];
-  const height=width*hull.naturalHeight/hull.naturalWidth;
-  const [turretWidth,pivotX,pivotY]=TANK_TURRET_POSES[index];
-  const turretHeight=turretWidth*turret.naturalHeight/turret.naturalWidth;
+  const {rect:[hx,hy,hw,hh],mount:[ringX,ringY],width,ground}=TANK_HULL_POSES[facing];
+  const scale=width/hw,height=hh*scale;
+  const {rect:[tx,ty,tw,th],mount:[pivotX,pivotY],width:turretWidth}=TANK_TURRET_POSES[index];
+  const turretScale=turretWidth/tw;
   const suspension=strength>.025?(unit.lean??0):0;
   const bounce=strength>.025?Math.sin((unit.travel??0)*14)*.43*strength:0;
 
@@ -1964,12 +1969,12 @@ function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
   if (suspension) context.rotate(suspension);
   context.save();
   if (mirror) context.scale(-1,1);
-  context.drawImage(hull,-width/2,-height,width,height);
+  context.drawImage(atlas,hx,hy,hw,hh,-width/2,-height,width,height);
   context.restore();
-  context.translate((ringX-.5)*width*(mirror?-1:1),(ringY-1)*height);
+  context.translate((ringX-hx-hw/2)*scale*(mirror?-1:1),(ringY-hy-hh)*scale);
   // Interpolate between the painted directions around the mounting ring.
   context.rotate((screenAngle-step*octant)*.38);
-  context.drawImage(turret,-pivotX*turretWidth,-pivotY*turretHeight,turretWidth,turretHeight);
+  context.drawImage(atlas,tx,ty,tw,th,(tx-pivotX)*turretScale,(ty-pivotY)*turretScale,turretWidth,th*turretScale);
   context.restore();
   return true;
 }
