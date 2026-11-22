@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=shared-match">
+  <link rel="stylesheet" href="style.css?v=terrain-cache">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=shared-match" defer></script>
-  <script src="observer.js?v=unit-ranks" defer></script>
+  <script src="observer.js?v=terrain-cache" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -63,7 +63,9 @@
         </div>
       </div>
       <div class="viewport" id="viewport">
+        <canvas id="map-ground" aria-hidden="true"></canvas>
         <canvas id="map" aria-label="矿区战术地图，点击单位自动跟踪，拖动地图，按住 Shift 拖动框选" tabindex="0"></canvas>
+        <div class="map-shade" aria-hidden="true"></div>
         <div class="radar-frame"><canvas id="radar" aria-label="小地图，点击移动视野"></canvas><div class="radar-glass" aria-hidden="true"></div></div>
         <section id="unit-menu" class="map-menu unit-menu" aria-label="所选单位状态" hidden>
           <div class="unit-status"><strong id="active-unit">未选择单位</strong><span><i class="dot green"></i> <span id="unit-mode"></span></span></div>

@@ -25,7 +25,7 @@ const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(),'.local',
 const checkpointFile = path.resolve(options.state || path.join(stateHome,'ore-command','match.bin'));
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
   '.css':'text/css; charset=utf-8','.webp':'image/webp','.md':'text/plain; charset=utf-8'};
-const publicFiles = new Set(['/index.html','/style.css','/audio.js','/commander.js','/game.js','/observer.js']);
+const publicFiles = new Set(['/index.html','/style.css','/audio.js','/commander.js','/game.js','/observer.js','/terrain-worker.js']);
 const pending = new Map();
 let nextRequest = 0;
 let worker;

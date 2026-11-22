@@ -109,8 +109,13 @@ function applyObservation(snapshot) {
   game.outcome = snapshot.outcome;
   game.firstEngagement = snapshot.firstEngagement;
   const faction = viewFaction();
-  faction.explored = new Map(snapshot.explored.map(([x,y,stamp]) => [tileKey(x,y),{ x,y,stamp }]));
-  faction.sight = new Set(snapshot.sight);
+  if (snapshot.explored.length !== faction.explored.size ||
+      snapshot.explored.some(([x,y,stamp])=>faction.explored.get(tileKey(x,y))?.stamp!==stamp)) {
+    faction.explored = new Map(snapshot.explored.map(([x,y,stamp]) => [tileKey(x,y),{ x,y,stamp }]));
+  }
+  if (snapshot.sight.length !== faction.sight.size || snapshot.sight.some(key=>!faction.sight.has(key))) {
+    faction.sight = new Set(snapshot.sight);
+  }
   for (const [x,y,value] of snapshot.ore) deposits.set(tileKey(x,y),value);
   updateObserverEntities(snapshot.buildings,displayedBuildings,structures);
   updateObserverEntities(snapshot.units,displayedUnits,units,performance.now());
@@ -231,7 +236,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=unit-ranks';
+  script.src = 'game.js?v=terrain-cache';
   document.head.append(script);
 }
 bootObserver();

@@ -3,12 +3,14 @@
 const ENGINE_ONLY=Boolean(globalThis.matchEngine);
 const byId = id => ENGINE_ONLY?null:document.getElementById(id);
 const map = byId('map');
+const groundMap = byId('map-ground');
 const radar = byId('radar');
 const view = byId('viewport');
 const buildingMenu = byId('building-menu');
 const unitMenu = byId('unit-menu');
 const matchResult = byId('match-result');
 const ctx = map?.getContext('2d');
+const groundCtx = groundMap?.getContext('2d',{alpha:false});
 const radarCtx = radar?.getContext('2d');
 const TILE_W = 84;
 const TILE_H = 42;
@@ -655,10 +657,19 @@ function stroke(context, x1,y1,x2,y2,color,width=1) {
 const CHUNK = 192;
 const TEXTURE_STEP = 1.5;
 const groundArt = new Map();
+const groundPreviews = new Map();
 const terrainLayer = ENGINE_ONLY?null:document.createElement('canvas');
 const revealMask = ENGINE_ONLY?null:document.createElement('canvas');
+const blurredMask = ENGINE_ONLY?null:document.createElement('canvas');
 const terrainPainter = terrainLayer?.getContext('2d');
 const maskPainter = revealMask?.getContext('2d');
+const blurPainter = blurredMask?.getContext('2d');
+const FOG_PADDING=64;
+const FOG_RESOLUTION=.5;
+const MAX_VIEWPORT_PIXELS=1500000;
+let fogView=null,terrainView=null,terrainRevision=0;
+let backgroundView=null,backgroundTime=-1;
+let textureReady=false,terrainWorker=null,terrainJob=null,terrainWorkerFailed=false;
 
 const sprites=new Map();
 const asset=(name,filename=name)=>{
@@ -745,7 +756,12 @@ groundImage.addEventListener('load',()=>{
     for (let i=0;i<samples.length;i++) samples[i]-=mean;
     return samples;
   });
-  groundArt.clear();
+  textureReady=true;
+  terrainRevision++;
+});
+groundImage.addEventListener('error',()=>{
+  textureReady=true;
+  terrainRevision++;
 });
 }
 
@@ -780,15 +796,7 @@ function sprite(context,name,x,bottom,width,mirror=false) {
 function mix(a,b,t) { return a+(b-a)*t; }
 function smooth(t) { return t*t*(3-2*t); }
 
-function terrainChunk(cx,cy) {
-  const key=tileKey(cx,cy);
-  if (groundArt.has(key)) {
-    const reused=groundArt.get(key);
-    groundArt.delete(key);
-    groundArt.set(key,reused);
-    return reused;
-  }
-  const tile=document.createElement('canvas');
+function paintTerrainChunk(cx,cy,tile) {
   tile.width=tile.height=CHUNK/TEXTURE_STEP;
   const draw=tile.getContext('2d');
   const pixels=draw.createImageData(tile.width,tile.height);
@@ -850,8 +858,72 @@ function terrainChunk(cx,cy) {
     }
   }
   draw.putImageData(pixels,0,0);
-  groundArt.set(key,tile);
-  while (groundArt.size>260) groundArt.delete(groundArt.keys().next().value);
+  return tile;
+}
+
+function saveTerrainChunk(key,art) {
+  groundArt.set(key,art);
+  if (groundArt.size>260) {
+    const oldest=groundArt.keys().next().value;
+    groundArt.get(oldest).close?.();
+    groundArt.delete(oldest);
+  }
+  terrainRevision++;
+  terrainJob=null;
+}
+
+function requestTerrainChunk(job) {
+  if (!job || terrainJob || !textureReady) return;
+  terrainJob=job;
+  if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
+    try {
+      const worker=new Worker('terrain-worker.js?v=terrain-cache');
+      terrainWorker=worker;
+      worker.onmessage=({data})=>{
+        if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
+        else data.art.close();
+      };
+      worker.onerror=event=>{
+        event.preventDefault();
+        if (terrainWorker!==worker) return;
+        worker.terminate();
+        terrainWorker=null;
+        terrainWorkerFailed=true;
+        terrainJob=null;
+        terrainRevision++;
+      };
+      worker.postMessage({seed:MAP_SEED,texture:groundTexture});
+    } catch {
+      terrainWorker?.terminate();
+      terrainWorker=null;
+      terrainWorkerFailed=true;
+    }
+  }
+  if (terrainWorker && !terrainWorkerFailed) {
+    terrainWorker.postMessage(job);
+  } else {
+    const paint=()=>saveTerrainChunk(job.key,paintTerrainChunk(job.x,job.y,document.createElement('canvas')));
+    if (typeof requestIdleCallback==='function') requestIdleCallback(paint,{timeout:120});
+    else setTimeout(paint,0);
+  }
+}
+
+function terrainPreview(x,y,key) {
+  if (groundPreviews.has(key)) return groundPreviews.get(key);
+  const tile=document.createElement('canvas');
+  tile.width=tile.height=12;
+  const context=tile.getContext('2d');
+  const pixels=context.createImageData(12,12);
+  for (let py=0;py<12;py++) {
+    for (let px=0;px<12;px++) {
+      const point=inverse((x+(px+.5)/12)*CHUNK,(y+(py+.5)/12)*CHUNK);
+      const color=SURFACES[terrain(Math.round(point.x),Math.round(point.y))];
+      pixels.data.set([color[0],color[1],color[2],255],(py*12+px)*4);
+    }
+  }
+  context.putImageData(pixels,0,0);
+  groundPreviews.set(key,tile);
+  if (groundPreviews.size>160) groundPreviews.delete(groundPreviews.keys().next().value);
   return tile;
 }
 
@@ -884,7 +956,7 @@ function fogTexture(seed,veil) {
     }
   }
   draw.putImageData(pixels,0,0);
-  return ctx.createPattern(tile,'repeat');
+  return groundCtx.createPattern(tile,'repeat');
 }
 
 const deepFog=ENGINE_ONLY?null:fogTexture(41,false);
@@ -898,60 +970,113 @@ function drawAtmosphere(center,w,h) {
   for (const layer of layers) {
     const x=(w/2-center.x*viewport.scale*layer.parallax+game.time*layer.drift)%(256*layer.x);
     const y=(h/2-center.y*viewport.scale*layer.parallax-game.time*layer.drift*.24)%(256*layer.y);
-    ctx.save();
-    ctx.translate(x,y);
-    ctx.scale(layer.x,layer.y);
-    ctx.fillStyle=layer.pattern;
-    ctx.fillRect(-x/layer.x,-y/layer.y,w/layer.x,h/layer.y);
-    ctx.restore();
+    groundCtx.save();
+    groundCtx.translate(x,y);
+    groundCtx.scale(layer.x,layer.y);
+    groundCtx.fillStyle=layer.pattern;
+    groundCtx.fillRect(-x/layer.x,-y/layer.y,w/layer.x,h/layer.y);
+    groundCtx.restore();
   }
 }
 
-function renderTerrain(center, range) {
-  const {w,h,dpr}=viewport;
-  if (terrainLayer.width!==map.width||terrainLayer.height!==map.height) {
-    terrainLayer.width=revealMask.width=map.width;
-    terrainLayer.height=revealMask.height=map.height;
+function updateFogView(center) {
+  const {w,h,scale}=viewport;
+  const {explored,sight}=viewFaction();
+  const usablePadding=FOG_PADDING-24;
+  if (fogView?.explored===explored && fogView.sight===sight && fogView.w===w && fogView.h===h &&
+      Math.abs(fogView.x-center.x)*scale<usablePadding &&
+      Math.abs(fogView.y-center.y)*scale<usablePadding) return fogView;
+  const width=Math.ceil((w+FOG_PADDING*2)*FOG_RESOLUTION);
+  const height=Math.ceil((h+FOG_PADDING*2)*FOG_RESOLUTION);
+  if (revealMask.width!==width || revealMask.height!==height) {
+    revealMask.width=blurredMask.width=width;
+    revealMask.height=blurredMask.height=height;
   }
-  const scale=dpr*viewport.scale;
-  const tx=dpr*w/2-center.x*scale;
-  const ty=dpr*h/2-center.y*scale;
-  const x0=Math.floor((center.x-w/(2*viewport.scale))/CHUNK);
-  const x1=Math.floor((center.x+w/(2*viewport.scale))/CHUNK);
-  const y0=Math.floor((center.y-h/(2*viewport.scale))/CHUNK);
-  const y1=Math.floor((center.y+h/(2*viewport.scale))/CHUNK);
-
-  terrainPainter.setTransform(scale,0,0,scale,tx,ty);
-  terrainPainter.imageSmoothingEnabled=true;
-  for (let x=x0;x<=x1;x++) {
-    for (let y=y0;y<=y1;y++) {
-      if ((x+1)*CHUNK<BOARD.left || x*CHUNK>BOARD.right ||
-          (y+1)*CHUNK<BOARD.top || y*CHUNK>BOARD.bottom) continue;
-      terrainPainter.drawImage(terrainChunk(x,y),x*CHUNK,y*CHUNK,CHUNK,CHUNK);
-    }
-  }
-
+  const density=scale*FOG_RESOLUTION;
   maskPainter.setTransform(1,0,0,1,0,0);
-  maskPainter.clearRect(0,0,revealMask.width,revealMask.height);
-  maskPainter.setTransform(scale,0,0,scale,tx,ty);
+  maskPainter.clearRect(0,0,width,height);
+  maskPainter.setTransform(density,0,0,density,width/2-center.x*density,height/2-center.y*density);
   maskPainter.save();
   maskPainter.beginPath();
   maskPainter.rect(BOARD.left,BOARD.top,BOARD.right-BOARD.left,BOARD.bottom-BOARD.top);
   maskPainter.clip();
-  drawFogMask(range);
+  const chunks=drawFogMask(visibleRange(FOG_PADDING+24));
   maskPainter.restore();
+  blurPainter.clearRect(0,0,width,height);
+  blurPainter.filter='blur('+11*FOG_RESOLUTION+'px)';
+  blurPainter.drawImage(revealMask,0,0);
+  fogView={...center,w,h,explored,sight,chunks};
+  return fogView;
+}
+
+function renderTerrain(center) {
+  const {w,h,scale}=viewport;
+  const fog=updateFogView(center);
+  if (terrainView?.fog===fog && terrainView.x===center.x && terrainView.y===center.y &&
+      terrainView.revision===terrainRevision) return terrainView;
+  // A terrain texel already covers about one CSS pixel. Keep this layer at that resolution.
+  const width=Math.ceil(w),height=Math.ceil(h);
+  if (terrainLayer.width!==width || terrainLayer.height!==height) {
+    terrainLayer.width=width;
+    terrainLayer.height=height;
+  }
+  terrainPainter.setTransform(1,0,0,1,0,0);
+  terrainPainter.clearRect(0,0,width,height);
+  terrainPainter.setTransform(scale,0,0,scale,w/2-center.x*scale,h/2-center.y*scale);
+  const x0=Math.floor((center.x-w/(2*scale))/CHUNK);
+  const x1=Math.floor((center.x+w/(2*scale))/CHUNK);
+  const y0=Math.floor((center.y-h/(2*scale))/CHUNK);
+  const y1=Math.floor((center.y+h/(2*scale))/CHUNK);
+  let next=null,nearest=Infinity;
+  for (let x=x0;x<=x1;x++) {
+    for (let y=y0;y<=y1;y++) {
+      const key=tileKey(x,y);
+      if (!fog.chunks.has(key)) continue;
+      const chunk=groundArt.get(key);
+      terrainPainter.drawImage(chunk??terrainPreview(x,y,key),x*CHUNK,y*CHUNK,CHUNK,CHUNK);
+      if (chunk) {
+        groundArt.delete(key);
+        groundArt.set(key,chunk);
+        continue;
+      }
+      const distance=(center.x/CHUNK-x-.5)**2+(center.y/CHUNK-y-.5)**2;
+      if (distance<nearest) {
+        next={key,x,y};
+        nearest=distance;
+      }
+    }
+  }
+  requestTerrainChunk(next);
   terrainPainter.setTransform(1,0,0,1,0,0);
   terrainPainter.save();
   terrainPainter.globalCompositeOperation='destination-in';
-  terrainPainter.filter='blur('+Math.round(11*dpr)+'px)';
-  terrainPainter.drawImage(revealMask,0,0);
+  const maskWidth=blurredMask.width/FOG_RESOLUTION,maskHeight=blurredMask.height/FOG_RESOLUTION;
+  terrainPainter.drawImage(blurredMask,(w-maskWidth)/2+(fog.x-center.x)*scale,
+    (h-maskHeight)/2+(fog.y-center.y)*scale,maskWidth,maskHeight);
   terrainPainter.restore();
-  ctx.drawImage(terrainLayer,0,0,w,h);
+  terrainView={...center,fog,revision:terrainRevision};
+  return terrainView;
+}
+
+function drawGround(center) {
+  const terrain=renderTerrain(center);
+  if (terrain===backgroundView && backgroundTime===game.time) return;
+  const {w,h}=viewport;
+  if (groundMap.width!==terrainLayer.width || groundMap.height!==terrainLayer.height) {
+    groundMap.width=terrainLayer.width;
+    groundMap.height=terrainLayer.height;
+  }
+  drawAtmosphere(center,w,h);
+  groundCtx.drawImage(terrainLayer,0,0);
+  backgroundView=terrain;
+  backgroundTime=game.time;
 }
 
 function drawFogMask(range) {
   const faction=viewFaction();
   const known=new Path2D(),lit=new Path2D();
+  const chunks=new Set();
+  const margin=24/viewport.scale;
   for (let x=range.x1;x<=range.x2;x++) {
     for (let y=range.y1;y<=range.y2;y++) {
       const key=tileKey(x,y);
@@ -963,12 +1088,19 @@ function drawFogMask(range) {
       const path=faction.sight.has(key)?lit:known;
       path.moveTo(px+rx,py);
       path.ellipse(px,py,rx,ry,0,0,Math.PI*2);
+      for (let cx=Math.floor((px-rx-margin)/CHUNK);cx<=Math.floor((px+rx+margin)/CHUNK);cx++) {
+        for (let cy=Math.floor((py-ry-margin)/CHUNK);cy<=Math.floor((py+ry+margin)/CHUNK);cy++) {
+          if ((cx+1)*CHUNK>BOARD.left && cx*CHUNK<BOARD.right &&
+              (cy+1)*CHUNK>BOARD.top && cy*CHUNK<BOARD.bottom) chunks.add(tileKey(cx,cy));
+        }
+      }
     }
   }
   maskPainter.fillStyle='#ffffff80';
   maskPainter.fill(known);
   maskPainter.fillStyle='#fff';
   maskPainter.fill(lit);
+  return chunks;
 }
 
 const shadowImage=ENGINE_ONLY?null:document.createElement('canvas');
@@ -2150,8 +2282,9 @@ function drawRallyPoint(building) {
   ctx.restore();
 }
 
-function visibleRange() {
-  const corners=[worldAt(0,0),worldAt(viewport.w,0),worldAt(viewport.w,viewport.h),worldAt(0,viewport.h)];
+function visibleRange(padding=0) {
+  const right=viewport.w+padding,bottom=viewport.h+padding;
+  const corners=[worldAt(-padding,-padding),worldAt(right,-padding),worldAt(right,bottom),worldAt(-padding,bottom)];
   return {
     x1: Math.max(bounds.minX,Math.floor(Math.min(...corners.map(p=>p.x)))-3),
     x2: Math.min(bounds.maxX,Math.ceil(Math.max(...corners.map(p=>p.x)))+3),
@@ -2213,10 +2346,10 @@ function drawWorld() {
   const {w,h,dpr}=viewport;
   if (!w||!h) return;
   ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
   const center=project(camera.x,camera.y);
-  drawAtmosphere(center,w,h);
+  drawGround(center);
   const range=visibleRange();
-  renderTerrain(center,range);
   ctx.translate(w/2,h/2);
   ctx.scale(viewport.scale,viewport.scale);
   ctx.translate(-center.x,-center.y);
@@ -2359,11 +2492,6 @@ function drawWorld() {
     }
   }
   ctx.setTransform(dpr,0,0,dpr,0,0);
-  const vignette=ctx.createRadialGradient(w*.51,h*.47,Math.min(w,h)*.28,w*.51,h*.47,Math.max(w,h)*.68);
-  vignette.addColorStop(0,'#10171000');
-  vignette.addColorStop(1,'#11191076');
-  ctx.fillStyle=vignette;
-  ctx.fillRect(0,0,w,h);
   if (selectionDrag?.active) {
     const {left,top,right,bottom}=selectionBounds(selectionDrag);
     ctx.fillStyle='#acd58c28';
@@ -5444,17 +5572,18 @@ window.addEventListener('blur',()=>{
 });
 }
 
-function sizeCanvas(canvas, box) {
+function sizeCanvas(canvas, box, pixelBudget=Infinity) {
   const rect=canvas.getBoundingClientRect();
   box.w=rect.width;
   box.h=rect.height;
-  box.dpr=Math.min(2,window.devicePixelRatio||1);
+  const limit=Math.sqrt(pixelBudget/Math.max(1,rect.width*rect.height));
+  box.dpr=Math.min(2,window.devicePixelRatio||1,Math.max(1,limit));
   canvas.width=Math.max(1,Math.round(rect.width*box.dpr));
   canvas.height=Math.max(1,Math.round(rect.height*box.dpr));
 }
 if (!ENGINE_ONLY) {
 const responsive=new ResizeObserver(()=>{
-  sizeCanvas(map,viewport);
+  sizeCanvas(map,viewport,MAX_VIEWPORT_PIXELS);
   sizeCanvas(radar,radarViewport);
   clampCamera();
   drawWorld();
@@ -5525,7 +5654,7 @@ reveal(FACTIONS.enemy,redOrigin.x,redOrigin.y,11,true);
 refreshVision(FACTIONS.player,[mcv],[]);
 refreshVision(FACTIONS.enemy,[enemyMcv],[]);
 if (!ENGINE_ONLY) {
-  sizeCanvas(map,viewport);
+  sizeCanvas(map,viewport,MAX_VIEWPORT_PIXELS);
   sizeCanvas(radar,radarViewport);
   attachObserver(globalThis.matchBootstrap);
   requestAnimationFrame(frame);
