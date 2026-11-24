@@ -9,6 +9,7 @@ let playerOrderRequests = Promise.resolve();
 let observerConnected = true;
 let observationRequest = 0;
 let observationTimer;
+let shownResultMatch = null;
 const displayedUnits = new Map();
 const displayedBuildings = new Map();
 const unitMotionSamples = new Map();
@@ -68,6 +69,19 @@ function updateMatchControls() {
   byId('start-session').disabled = running || !observerConnected || pendingControl;
   byId('end-session').disabled = !running || !observerConnected || pendingControl;
   updateBuildingStyleControls();
+}
+
+function showMatchResult(snapshot) {
+  if (snapshot.mode!=='human' || snapshot.status!=='finished' || shownResultMatch===snapshot.id) return;
+  const titles={player:'你赢了',enemy:'你输了',draw:'平局'};
+  const title=titles[snapshot.outcome];
+  if (!title) return;
+  const dialog=byId('match-result');
+  dialog.dataset.outcome=snapshot.outcome;
+  byId('match-result-title').textContent=title;
+  byId('match-result-detail').textContent='第 '+snapshot.round+' 局 · '+battleClock(snapshot.time);
+  if (!dialog.open) dialog.showModal();
+  shownResultMatch=snapshot.id;
 }
 
 const orderErrors={
@@ -365,6 +379,7 @@ function applyObservation(snapshot) {
   }
   if (outcomeChanged && game.outcome && !document.hidden) sound.play(game.outcome===snapshot.team?'ready':'alert');
   updateMatchControls();
+  showMatchResult(snapshot);
 }
 
 async function pollObservation() {

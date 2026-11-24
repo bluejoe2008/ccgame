@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
   <title>Command&amp;Conquer</title>
-  <link rel="stylesheet" href="style.css?v=right-command-dock">
+  <link rel="stylesheet" href="style.css?v=match-result">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=command-buttons" defer></script>
   <script src="building-themes.js?v=4" defer></script>
-  <script src="observer.js?v=map-exploration" defer></script>
+  <script src="observer.js?v=match-result" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -155,6 +155,14 @@
       </div>
     </section>
   </main>
+
+  <dialog id="match-result" class="match-result" aria-labelledby="match-result-title" aria-describedby="match-result-detail">
+    <form method="dialog">
+      <p id="match-result-detail" class="match-result-detail"></p>
+      <h2 id="match-result-title"></h2>
+      <button class="metal-button" type="submit" autofocus>查看战场</button>
+    </form>
+  </dialog>
 
   <dialog id="training-drills" aria-labelledby="drill-title">
     <form method="dialog">

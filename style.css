@@ -502,6 +502,23 @@ dialog {
   box-shadow: 0 12px 42px #080a07ce, inset 0 0 0 2px #181f16;
 }
 dialog::backdrop { background: #0a0f0aca; }
+.match-result {
+  width: min(520px, calc(100vw - 32px)); padding: 42px 24px;
+  text-align: center; border: 2px solid #b8d88c;
+  background: radial-gradient(ellipse at top, #394e2b, #172319 75%);
+  box-shadow: 0 0 70px #91bd5f38, 0 20px 80px #0009;
+}
+.match-result[data-outcome="enemy"] {
+  border-color: #df987d; background: radial-gradient(ellipse at top, #57352d, #251c19 75%);
+  box-shadow: 0 0 70px #bf644438, 0 20px 80px #0009;
+}
+.match-result[data-outcome="draw"] { border-color: #c8ba91; }
+.match-result::backdrop { background: #060c09d9; backdrop-filter: blur(4px); }
+.match-result h2 { margin: 14px 0 30px; color: #d8f4b1; font-size: clamp(44px, 9vw, 68px); letter-spacing: .08em; }
+.match-result[data-outcome="enemy"] h2 { color: #ffc1a5; }
+.match-result[data-outcome="draw"] h2 { color: #e3d8bc; }
+.match-result-detail { margin: 0; color: #c6ccb7; font-size: 14px; }
+.match-result .metal-button { min-height: 42px; min-width: 140px; font-size: 14px; }
 dialog header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--faint); padding: 12px 16px; }
 dialog h2 { font-size: 17px; }
 dialog dl { display: grid; gap: 12px; padding: 0 16px 8px; }
