@@ -196,3 +196,21 @@ A cannon cell contains just the turret and barrel, with its round turntable base
 ### 两向城墙与防御设施
 
 > Grid order, top row left to right: (1) short crenellated city-wall module on a thick period masonry foundation, long axis MUST slope down-right screen-wise at about 26 degrees; (2) a matching short wall module of the same scale and shape but turned 90 degrees in world, long axis MUST slope up-right screen-wise at about 26 degrees; (3) low defensive turret, a thick octagonal parapet with a recognizable short dark game cannon centered inside. Bottom row left to right: (4) a low broad squat defensive bunker of period masonry and an unmistakably long dark narrow embrasure; (5) optical defense tower, tall narrow stone tower under a small period canopy, an unmistakable round glass/brass optical lens aimed frontwards below the eaves; (6) completely empty transparent slot.
+
+## 写实运输直升机（2026-11）
+
+使用内置 imagegen 工具生成透明四向素材，再拆分、缩小并按蓝色标识制作红方变体。
+游戏素材为 `helicopter-{0,1,2,3}-{blue,red}.webp`；旋翼与拖影独立缓存为 `helicopter-rotor.webp`、`helicopter-rotor-blur.webp`，运行时组合，不重新生成机身。
+朝向依次为右、右下、右上、下；左向由镜像实现。旋翼中心按各姿态的机身桅杆位置对齐。
+
+最终生成提示词：
+
+```text
+Use case: stylized-concept, grounded photorealistic.
+Asset type: transparent sprite atlas for an isometric real-time strategy game.
+Primary request: A beautiful highly detailed realistic medium military transport helicopter, the SAME physical design in four directions. An elegant utilitarian twin-engine utility helicopter with a long tapering tail boom, glass cockpit, side sliding cargo door, visible side windows, small wheels or landing skids, exhausts and mechanical main rotor mast. Weathered slate-blue painted metal, silver panel edges, subtle grime, rich dark blue reflective glazing, rivets and real dimensional engine nacelles. Clearly legible steel-blue team stripes on doors and tail. No weapons or insignia.
+Composition: EXACT 2 columns by 2 rows, four separate complete helicopters with generous transparent gutters. Top-left nose pointing horizontally RIGHT; top-right nose pointing diagonally DOWN-RIGHT toward viewer; bottom-left nose pointing diagonally UP-RIGHT away from viewer; bottom-right nose pointing straight DOWN toward viewer. Every pose uses the same fixed orthographic strategy-game camera at 30 degrees above ground and the same model scale. Bodies entirely inside cells with generous margins. Empty transparent backdrop, no floor or ground shadows.
+Lighting: physically rendered cinematic scale-model realism, soft daylight from upper left, rich occlusion in mechanical details, metallic highlights.
+CRITICAL: Main rotor BLADES must be REMOVED in every pose; show only the main rotor MAST and small circular central hub on top, because spinning blades will be composited by the game. Tail rotor blades also removed, show mount. Leave full tail boom intact. These must look like photographed detailed real aircraft miniatures, not vector drawings, cartoon or low-poly art.
+Constraints: actual transparent alpha background, no text, no labels, no guides, no border, no grid, no extra objects, no scenery, no watermark.
+```

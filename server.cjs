@@ -28,7 +28,7 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invali
 const stateHome = process.env.XDG_STATE_HOME || path.join(os.homedir(),'.local','state');
 const checkpointFile = path.resolve(options.state || path.join(stateHome,'ore-command','match.bin'));
 const types = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8',
-  '.css':'text/css; charset=utf-8','.webp':'image/webp','.md':'text/plain; charset=utf-8'};
+  '.css':'text/css; charset=utf-8','.webp':'image/webp','.png':'image/png','.md':'text/plain; charset=utf-8'};
 const publicFiles = new Set(['/index.html','/style.css','/audio.js','/commander.js','/building-themes.js',
   '/game.js','/observer.js','/terrain-worker.js']);
 const pending = new Map();
@@ -222,7 +222,7 @@ async function main() {
   server.listen(port,options.bind,()=>{
     const host=options.bind==='0.0.0.0'?'127.0.0.1':options.bind;
     launchWorker(host,server.address().port);
-    console.log('Command&Conquer listening on %s:%s',options.bind,server.address().port);
+    console.log('C&C listening on %s:%s',options.bind,server.address().port);
   });
   async function stop() {
     if (stopping) return;

@@ -39,22 +39,12 @@ button:disabled { opacity: .45; cursor: default; }
 }
 .brand { display: flex; align-items: center; gap: 13px; }
 .insignia {
-  display: flex;
-  align-items: end;
-  justify-content: center;
-  gap: 4px;
-  width: 47px;
-  height: 45px;
-  padding: 10px 8px;
-  background: linear-gradient(152deg,#c84d3d,#8c291e);
-  border: 1px solid #e36954;
-  box-shadow: inset 0 0 0 2px #60261e, 0 3px 9px #0c0e0a80;
-  clip-path: polygon(0 0, 100% 0, 100% 77%, 76% 100%, 0 100%);
+  display: block;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
 }
-.insignia i { display: block; width: 5px; background: #ffdcbe; transform: skew(-16deg); }
-.insignia i:nth-child(1) { height: 10px; }
-.insignia i:nth-child(2) { height: 16px; }
-.insignia i:nth-child(3) { height: 22px; }
 h1,h2 { margin: 0; }
 .brand h1 { font-size: 24px; font-weight: 800; letter-spacing: .055em; line-height: 1.16; }
 .metrics { display: flex; margin: 0; gap: 8px; }
@@ -540,11 +530,7 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
   .masthead { min-height: 88px; grid-template-columns: minmax(0,1fr) auto; gap: 4px 6px; margin-bottom: 8px; }
   .brand { gap: 7px; }
   .brand h1 { font-size: 17px; }
-  .insignia { width: 31px; height: 32px; gap: 3px; padding: 6px; }
-  .insignia i { width: 3px; }
-  .insignia i:nth-child(1) { height: 7px; }
-  .insignia i:nth-child(2) { height: 11px; }
-  .insignia i:nth-child(3) { height: 15px; }
+  .insignia { width: 34px; height: 34px; }
   .metrics { grid-column: 1/-1; grid-row: 2; gap: 4px; }
   .metric { min-width: 57px; padding: 5px 6px; gap: 4px; }
   .metric.power-metric { min-width: 64px; }

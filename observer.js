@@ -486,7 +486,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=edge-cursor';
+  script.src = 'game.js?v=tank-and-transports';
   document.head.append(script);
 }
 bootObserver();

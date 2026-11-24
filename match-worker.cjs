@@ -49,6 +49,15 @@ const interfaceScript = new vm.Script(`({
       if (unit.velocity>speed) unit.velocity=speed;
     }
     structures.splice(0, structures.length, ...saved.structures);
+    pathStructureCount=-1;
+    for (const unit of units) {
+      if (unit.type!=='helicopter' || unit.goal || unitElevation(unit)>2) continue;
+      const airport=structures.find(building=>building.type==='airport' && building.team===unit.team &&
+        unit.x>=building.x-.5 && unit.x<building.x+building.width-.5 &&
+        unit.y>=building.y-.5 && unit.y<building.y+building.height-.5);
+      const parking=airport && airfieldParking(airport,unit);
+      if (parking) Object.assign(unit,parking);
+    }
     searchSites.splice(0, searchSites.length, ...saved.searchSites);
     groundImpacts.push(...(saved.groundImpacts??[]));
     for (const [machine, stored] of [[deposits,saved.deposits],[oreReserves,saved.oreReserves],

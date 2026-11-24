@@ -179,7 +179,7 @@ const UNIT_ART = {
   fighter:{bracket:51,hitWidth:59,hitHeight:50},
   bomber:{bracket:57,hitWidth:65,hitHeight:56},
   reconPlane:{bracket:46,hitWidth:52,hitHeight:44},
-  helicopter:{bracket:49,hitWidth:52,hitHeight:39},
+  helicopter:{bracket:58,hitWidth:76,hitHeight:61},
 };
 const COMBAT_INFANTRY = new Set(['soldier','rocketeer','mortar','cavalry','mountedCavalry']);
 const VEHICLE_CONTACT_RADIUS = {mcv:.58,miner:.54,tank:.49,pulseTank:.53,siegeTank:.53,artillery:.52};
@@ -225,10 +225,25 @@ let edgeScrollPointer = null;
 const edgeScrollCursors=Object.fromEntries([
   ['n',0],['ne',45],['e',90],['se',135],['s',180],['sw',225],['w',270],['nw',315],
 ].map(([direction,angle])=>{
-  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'+
-    '<path transform="rotate('+angle+' 16 16)" d="M16 3 28 16H21V28H11V16H4Z" '+
-    'fill="#f5d87a" stroke="#182017" stroke-width="2" stroke-linejoin="round"/></svg>';
-  return [direction,'url("data:image/svg+xml,'+encodeURIComponent(svg)+'") 16 16, '+direction+'-resize'];
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 44 44">'+
+    '<defs><linearGradient id="metal" x1="0" y1="0" x2="1" y2="1">'+
+    '<stop stop-color="#f3f5e7"/><stop offset=".3" stop-color="#919d99"/>'+
+    '<stop offset=".55" stop-color="#343f44"/><stop offset="1" stop-color="#101c23"/>'+
+    '</linearGradient><linearGradient id="gold" x2=".3" y2="1">'+
+    '<stop stop-color="#fff9d6"/><stop offset=".4" stop-color="#ead18a"/>'+
+    '<stop offset="1" stop-color="#9c793c"/></linearGradient>'+
+    '<filter id="shadow" x="-40%" y="-30%" width="180%" height="180%">'+
+    '<feDropShadow dx="0" dy="1.5" stdDeviation="1.2" flood-color="#000" flood-opacity=".85"/>'+
+    '</filter></defs><g transform="rotate('+angle+' 22 22)">'+
+    '<path d="M22 3 38 20 29 18 29 34 15 34 15 18 6 20Z" fill="url(#metal)" '+
+    'stroke="#071219" stroke-width="1.6" stroke-linejoin="round" filter="url(#shadow)"/>'+
+    '<path d="M22 5 35 18 27 16 27 32 17 32 17 16 9 18Z" fill="#172b32" stroke="#d1bf86" stroke-width=".8"/>'+
+    '<path d="M22 7 31 16 24.5 14.5 24.5 29 19.5 29 19.5 14.5 13 16Z" fill="url(#gold)"/>'+
+    '<path d="M22 8 22 27" stroke="#fff8d6" stroke-width=".8" opacity=".75"/>'+
+    '<path d="m18 36 4 3 4-3" fill="none" stroke="#f0dba0" stroke-width="1.4" stroke-linecap="round"/>'+
+    '<path d="m19.5 40 2.5 2 2.5-2" fill="none" stroke="#d5c590" stroke-width="1" opacity=".5"/>'+
+    '</g></svg>';
+  return [direction,'url("data:image/svg+xml,'+encodeURIComponent(svg)+'") 22 22, '+direction+'-resize'];
 }));
 const controlGroups=Array.from({length:10},()=>[]);
 const controlGroupStorage='ore-command-control-groups';
@@ -712,7 +727,14 @@ const unitSpriteWidths={
   artillery:[108,105,103,62],
   horse:[54,49,47,24], cavalry:[31,26,24,23], mountedCavalry:[59,54,52,30],
   fighter:[109,110,108,91],
+  helicopter:[143.83,118.94,134.71,39.71],
 };
+const HELICOPTER_POSES=[
+  {hub:[93.48,6.65],tail:[-88.73,-1.52]},
+  {hub:[73.91,26.6],tail:[-62.7,-22.42]},
+  {hub:[91.2,2.47],tail:[-77.33,27.93]},
+  {hub:[20.14,38.57],tail:[-1.33,-33.82]},
+];
 const periodUnitHeights={soldier:42,engineer:39,rocketeer:43,mortar:41,cavalry:40,mountedCavalry:57};
 const TANK_HULL_POSES=[
   {rect:[22,190,282,154],mount:[172,229],width:89,ground:17},
@@ -737,6 +759,8 @@ if (!ENGINE_ONLY) {
 for (const tint of ['blue','red']) {
   asset('tank-reference-'+tint);
 }
+asset('helicopter-rotor');
+asset('helicopter-rotor-blur');
 for (const type of Object.keys(unitSpriteWidths)) {
   for (let facing=0;facing<4;facing++) {
     for (const tint of ['blue','red']) {
@@ -906,7 +930,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=edge-cursor');
+      const worker=new Worker('terrain-worker.js?v=tank-and-transports');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -1983,34 +2007,48 @@ function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
   return true;
 }
 
-function drawTransportHelicopter(context,unit,origin,paint) {
-  const {bar,extrude,panel,line}=vehiclePainter(context,origin,unit.heading);
-  for (const side of [-1,1]) {
-    line([-.59,side*.37,1],[.65,side*.37,1],'#242e30',3);
-    for (const x of [-.39,.37]) line([x,side*.37,2],[x,side*.27,12],'#565f5e',2.2);
+function drawTransportHelicopter(context,unit,origin) {
+  const forward=project(Math.cos(unit.heading),Math.sin(unit.heading));
+  const angle=Math.atan2(forward.y,Math.abs(forward.x));
+  const facing=angle<-.22?2:angle<.22?0:angle>1.02?3:1;
+  const image=sprites.get('helicopter-'+facing+'-'+factionTint(unit.team));
+  if (!image?.naturalWidth) return;
+  const width=unitSpriteWidths.helicopter[facing],height=width*image.naturalHeight/image.naturalWidth;
+  const {hub:[hx,hy],tail:[tx,ty]}=HELICOPTER_POSES[facing];
+  const flying=unitElevation(unit)>3;
+  const rotorAngle=reducedMotion.matches?.36:lastFrame*(flying?.021:.004)+(unit.id??0)*.83;
+  const rotor=sprites.get('helicopter-rotor'),blur=sprites.get('helicopter-rotor-blur');
+  context.save();
+  context.translate(origin.x,origin.y-33);
+  if (forward.x<0 && facing!==3) context.scale(-1,1);
+  context.drawImage(image,-hx,-hy,width,height);
+  if (rotor?.naturalWidth) {
+    context.save();
+    context.translate(tx,ty);
+    context.scale(1,.72);
+    for (let i=0;i<2;i++) {
+      context.save();context.rotate(rotorAngle*1.7+i*Math.PI/2);
+      context.drawImage(rotor,-8,-.9,16,1.8);context.restore();
+    }
+    context.restore();
+    if (flying && !reducedMotion.matches && blur?.naturalWidth) context.drawImage(blur,-66,-33,132,66);
+    context.save();
+    context.scale(1,.48);
+    context.globalAlpha*=flying && !reducedMotion.matches?.64:.95;
+    for (let i=0;i<2;i++) {
+      context.save();context.rotate(rotorAngle+i*Math.PI/2);
+      context.drawImage(rotor,-66,-3,132,6);context.restore();
+    }
+    context.restore();
+    context.fillStyle='#aeb9b3';context.strokeStyle='#263337';context.lineWidth=1;
+    context.beginPath();context.ellipse(0,0,3.3,1.9,0,0,Math.PI*2);context.fill();context.stroke();
   }
-  bar(-1.42,-.07,.93,.14,17,23,GUNMETAL);
-  bar(-1.36,-.052,.14,.104,21,39,paint.trim);
-  extrude([[-.63,-.38],[.37,-.38],[.68,-.23],[.78,0],[.68,.23],[.37,.38],[-.63,.38]],
-    8,31,paint.body,[[-.55,-.34],[.35,-.31],[.55,-.19],[.65,0],[.55,.19],[.35,.31],[-.55,.34]]);
-  for (const side of [-1,1]) {
-    panel([[.15,side*.331,26],[.47,side*.255,27],[.62,side*.19,19],[.15,side*.352,18]],'#20343c','#829b9e',.8,true);
-    line([-.54,side*.379,17],[-.04,side*.379,17],paint.light,1.6);
-  }
-  panel([[.52,-.18,28],[.52,.18,28],[.76,.12,17],[.76,-.12,17]],'#324c58','#899b9d',.8,true);
-  bar(-.19,-.17,.34,.34,29,36,paint.trim);
-  bar(-.04,-.04,.08,.08,34,46,GUNMETAL);
-  const angle=reducedMotion.matches?.24:lastFrame*.017;
-  for (let i=0;i<2;i++) {
-    const heading=angle+i*Math.PI/2;
-    const x=Math.cos(heading)*1.16,y=Math.sin(heading)*1.16;
-    line([-x,-y,45],[x,y,45],'#313a3bd0',2.2);
-  }
+  context.restore();
 }
 
 function renderUnit(context,unit,origin) {
   const paint=TEAM_PAINT[unit.team];
-  if (unit.type==='helicopter') return drawTransportHelicopter(context,unit,origin,paint);
+  if (unit.type==='helicopter') return drawTransportHelicopter(context,unit,origin);
   const hostile=unit.team==='enemy';
   const wheeled=Boolean(VEHICLE_CONTACT_RADIUS[unit.type]);
   const dog=unit.type==='dog';
@@ -3404,6 +3442,20 @@ function updateAircraftAirfield(unit,dt) {
 }
 
 function airfieldParking(airport,unit) {
+  if (unit.type==='helicopter') {
+    // Stage transports beyond the airport's front corner, outside the hangar silhouette.
+    for (let row=0;row<4;row++) for (const column of [0,-1,1,-2,2]) {
+      const point={x:airport.x+airport.width+.5+column*1.6+row*1.1,
+        y:airport.y+airport.height+.5-column*1.6+row*1.1};
+      if (!walkable(Math.round(point.x),Math.round(point.y)) || amountAt(Math.round(point.x),Math.round(point.y))>0) continue;
+      const taken=units.some(other=>other!==unit && other.health>0 && (
+        other.goal?.kind==='land' && sameTile(other.goal,point) ||
+        (!isAirborne(other) || unitElevation(other)<24) &&
+        distanceTo(other,point)<UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type]));
+      if (!taken) return point;
+    }
+    return null;
+  }
   const center=yardCenter(airport);
   const grounded={type:unit.type,altitude:0};
   for (const [dx,dy] of [[-1.05,.77],[1.05,.77],[-1.05,-.77],[1.05,-.77]]) {
@@ -4068,6 +4120,48 @@ function canPlace(building,except=null) {
 
 function treasury(team) {
   return FACTIONS[team];
+}
+
+function buildingSaleRefund(building) {
+  const spec=buildingSpec(building.type);
+  const cost=spec.cost??(building.type==='yard'?PRODUCTS.mcv.cost:building.type==='oil'?BUILDINGS.refinery.cost:0);
+  const integrity=Math.max(0,Math.min(1,building.health/spec.health));
+  const production=(building.queue??[]).reduce((sum,job)=>{
+    const product=PRODUCTS[job.type];
+    return sum+(!job.awaitingPayment && product?Math.floor(product.cost*Math.max(0,Math.min(1,job.remaining/product.time))):0);
+  },0);
+  return Math.floor(cost*.5*integrity)+production;
+}
+
+function sellBuilding(building) {
+  const index=structures.indexOf(building);
+  if (index<0 || !FACTIONS[building.team] || building.health<=0) return null;
+  const refund=buildingSaleRefund(building);
+  const witnesses=Object.values(FACTIONS).filter(faction=>canSeeEntity(faction,building));
+  if (building.type==='oil') closeOilHolding(building,'sold');
+  building.health=0;
+  building.queue.length=0;
+  building.repair=null;
+  structures.splice(index,1);
+  treasury(building.team).credits+=refund;
+  for (const unit of units) {
+    if (unit.attackTarget===building) clearAttackOrder(unit);
+    if (unit.captureTarget===building) stopCapture(unit);
+    if (unit.serviceDepot===building) {
+      releaseGarage(unit);
+      unit.mode='idle';unit.goal=null;unit.route=[];
+    }
+  }
+  for (const faction of witnesses) {
+    faction.commander.confirmedLosses.add(building);
+    if (faction.commander.plan?.target===building) faction.commander.nextReview=0;
+  }
+  pathStructureCount=-1;
+  refreshPowerGrids();
+  playAt('cash',yardCenter(building),building);
+  log(factionName(building.team)+'出售'+buildingSpec(building.type).label+'，回收 '+refund+' 储备。',building.team);
+  checkMatchResult();
+  return refund;
 }
 
 function stopCapture(engineer) {
@@ -5592,6 +5686,11 @@ function executePlayerOrder(order,resolve) {
   const own=entity=>entity?.team===faction.team && entity.health>0;
   const ready=building=>own(building) && building?.width && building.remaining===0;
   const selected=resolve(order.source);
+  if (order.kind==='sell') {
+    if (!own(selected) || !selected.width) return fail('unavailable');
+    const refund=sellBuilding(selected);
+    return refund===null?fail('unavailable'):{ordered:1,refund};
+  }
   if (order.kind==='deploy') {
     if (!own(selected) || selected.type!=='mcv') return fail('unavailable');
     if (!deployYard(selected)) return fail('placement');
@@ -6156,21 +6255,15 @@ function purchaseButton(type,spec,label=spec.label) {
   button.type='button';
   button.className='command';
   button.dataset.type=type;
-  const icon=document.createElement(type==='helicopter'?'canvas':'img');
+  const icon=document.createElement('img');
   icon.className='command-thumbnail';
   icon.setAttribute('aria-hidden','true');
-  if (type==='helicopter') {
-    icon.width=138;
-    icon.height=88;
-    drawTransportHelicopter(icon.getContext('2d'),{heading:.46},{x:69,y:72},TEAM_PAINT.player);
-  } else {
-    icon.alt='';
-    icon.loading='lazy';
-    if (spec.building) {
-      const art=isAirborne({type})?'fighter':type;
-      const facing=type==='reconPlane'?2:1;
-      icon.src=sprites.get(art+'-'+facing+'-blue').src;
-    }
+  icon.alt='';
+  icon.loading='lazy';
+  if (spec.building) {
+    const art=type==='helicopter'?'helicopter':isAirborne({type})?'fighter':type;
+    const facing=type==='reconPlane'?2:1;
+    icon.src=sprites.get(art+'-'+facing+'-blue').src;
   }
   const name=document.createElement('span');
   name.textContent=label;
@@ -6209,7 +6302,11 @@ function syncProductionQueue(building) {
 function syncPlayerBuildingControls(building) {
   const controls=byId('building-controls');
   controls.hidden=!playerCanCommand() || building.team!=='player' || building.health<=0;
+  byId('building-actions').hidden=controls.hidden;
   if (controls.hidden) return;
+  const sell=byId('sell-building');
+  sell.textContent='出售 +'+buildingSaleRefund(building);
+  sell.title='按剩余耐久折价回收 50% 造价，另退已付款生产的未完成部分';
   const construction=byId('construction-control');
   construction.hidden=!readyConstructionSite(building,'player');
   if (!construction.hidden) {
@@ -6436,6 +6533,20 @@ function attachPlayerControls() {
   }
   byId('deploy-base').addEventListener('click',()=>{
     deployBaseVehicle(deployCandidate());
+  });
+  let selling=false;
+  byId('sell-building').addEventListener('click',async()=>{
+    const building=game.selectedBuilding;
+    if (selling || !playerCanCommand() || building?.team!=='player') return;
+    selling=true;
+    byId('sell-building').disabled=true;
+    try {
+      const sold=await sendPlayerOrder({kind:'sell',source:building.viewId},'建筑已出售，回收资金已到账。');
+      if (sold && game.selectedBuilding?.viewId===building.viewId) select([]);
+    } finally {
+      selling=false;
+      byId('sell-building').disabled=false;
+    }
   });
   construction.addEventListener('click',event=>{
     const button=event.target.closest('button[data-type]');
@@ -7106,8 +7217,13 @@ function frame(timestamp) {
 
 reveal(FACTIONS.player,blueOrigin.x,blueOrigin.y,11,true);
 reveal(FACTIONS.enemy,redOrigin.x,redOrigin.y,11,true);
-refreshVision(FACTIONS.player,[mcv],[]);
-refreshVision(FACTIONS.enemy,[enemyMcv],[]);
+for (const vehicle of [mcv,enemyMcv]) {
+  // Keep the future construction-yard footprint clear while sharing normal spawn/collision rules.
+  const staging={type:'yard',team:vehicle.team,x:vehicle.x-1,y:vehicle.y,width:YARD.width,height:YARD.height};
+  for (const type of ['tank','tank','soldier','soldier','soldier']) spawnUnit(staging,type);
+}
+refreshVision(FACTIONS.player,units.filter(unit=>unit.team==='player'),[]);
+refreshVision(FACTIONS.enemy,units.filter(unit=>unit.team==='enemy'),[]);
 if (!ENGINE_ONLY) {
   sizeCanvas(map,viewport,MAX_VIEWPORT_PIXELS);
   sizeCanvas(radar,radarViewport);
