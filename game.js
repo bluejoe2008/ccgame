@@ -26,7 +26,6 @@ const AIRFIELD_LOSS_GRACE=10;
 const REPAIR_TANKS=new Set(['tank','pulseTank','siegeTank']);
 const ORE_GROW_DELAY = 12;
 const ORE_GROW_RATE = 2.2;
-const UNDERGROUND_ORE_FRACTION=.65;
 const ORE_GRADES={
   poor:{label:'贫矿',minimum:70,variation:155,rate:34,color:'#b0a99a'},
   rich:{label:'富矿',minimum:230,variation:155,rate:46,color:'#f6d174'},
@@ -76,7 +75,7 @@ const COLORS = {
 };
 
 const deposits = new Map();
-const oreReserves = new Map();
+const oreReserves = new Map(); // Kept for compatibility with older checkpoints; no longer limits growth.
 const recoveringOre = new Map();
 const ground = new Map();
 const hillHeights=new Map();
@@ -538,7 +537,6 @@ function amountAt(x,y) {
   if (!deposits.has(key)) {
     const capacity=oreCapacity(x,y);
     deposits.set(key,capacity);
-    if (capacity) oreReserves.set(key,Math.round(capacity*UNDERGROUND_ORE_FRACTION));
   }
   return deposits.get(key);
 }
@@ -547,10 +545,10 @@ function takeOre(cell,left) {
   const {x,y}=cell;
   const key=tileKey(x,y);
   deposits.set(key,left);
-  if (!(oreReserves.get(key)>0)) return;
   let ore=recoveringOre.get(key);
   if (!ore) {
     ore={x,y,capacity:oreCapacity(x,y)};
+    if (!ore.capacity) return;
     recoveringOre.set(key,ore);
   }
   ore.ready=game.time+ORE_GROW_DELAY;
@@ -560,12 +558,22 @@ function advanceOre(dt) {
   for (const [key,ore] of recoveringOre) {
     if (game.time<ore.ready || onStructure(ore.x,ore.y)) continue;
     const amount=deposits.get(key);
-    const reserve=oreReserves.get(key);
-    const growth=Math.min(ore.capacity-amount,dt*ORE_GROW_RATE,reserve);
+    const growth=Math.min(ore.capacity-amount,dt*ORE_GROW_RATE);
     deposits.set(key,amount+growth);
-    oreReserves.set(key,reserve-growth);
-    if (amount+growth>=ore.capacity || growth>=reserve) recoveringOre.delete(key);
+    if (amount+growth>=ore.capacity) recoveringOre.delete(key);
   }
+}
+
+function restoreOreGrowth() {
+  // Exhausted legacy deposits may no longer be in the recovery queue.
+  for (const [key,amount] of deposits) {
+    const [x,y]=key.split(',').map(Number),capacity=oreCapacity(x,y);
+    if (!capacity || amount>=capacity) {recoveringOre.delete(key);continue;}
+    const recovering=recoveringOre.get(key);
+    if (recovering) recovering.capacity=capacity;
+    else recoveringOre.set(key,{x,y,capacity,ready:game.time+ORE_GROW_DELAY});
+  }
+  oreReserves.clear();
 }
 
 function forestAt(x,y,kind=terrain(x,y)) {

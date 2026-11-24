@@ -74,6 +74,7 @@ const interfaceScript = new vm.Script(`({
     }
     nextUnitId = saved.nextUnitId;
     Object.assign(game, saved.game);
+    restoreOreGrowth();
     if (saved.match.status === 'running') {
       for (const faction of Object.values(FACTIONS)) {
         delete faction.priorityFighter;
