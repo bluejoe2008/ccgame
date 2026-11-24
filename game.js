@@ -222,6 +222,14 @@ let mouseDrag = null;
 let selectionDrag = null;
 let mapPointer = null;
 let edgeScrollPointer = null;
+const edgeScrollCursors=Object.fromEntries([
+  ['n',0],['ne',45],['e',90],['se',135],['s',180],['sw',225],['w',270],['nw',315],
+].map(([direction,angle])=>{
+  const svg='<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">'+
+    '<path transform="rotate('+angle+' 16 16)" d="M16 3 28 16H21V28H11V16H4Z" '+
+    'fill="#f5d87a" stroke="#182017" stroke-width="2" stroke-linejoin="round"/></svg>';
+  return [direction,'url("data:image/svg+xml,'+encodeURIComponent(svg)+'") 16 16, '+direction+'-resize'];
+}));
 const controlGroups=Array.from({length:10},()=>[]);
 const controlGroupStorage='ore-command-control-groups';
 let lastFrame = 0;
@@ -898,7 +906,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=edge-scroll');
+      const worker=new Worker('terrain-worker.js?v=edge-cursor');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -6306,6 +6314,12 @@ function deployCandidate() {
   return unit??null;
 }
 
+function deployBaseVehicle(unit) {
+  if (!playerCanCommand() || game.placement || unit?.type!=='mcv' ||
+      unit.team!=='player' || unit.health<=0 || !units.includes(unit)) return;
+  void sendPlayerOrder({kind:'deploy',source:unit.viewId},'基地车开始部署。');
+}
+
 function syncPlayerPointer() {
   const deploy=byId('deploy-base');
   const candidate=deployCandidate();
@@ -6318,8 +6332,13 @@ function syncPlayerPointer() {
     deploy.hidden=x<0 || x>viewport.w-60 || y<0 || y>viewport.h-35;
     deploy.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
   }
+  const edge=edgeScrollDirection();
+  const dragging=mouseDrag?.active;
+  const selecting=selectionDrag?.active;
+  map.style.cursor=dragging?'grabbing':selecting?'crosshair':edge?edgeScrollCursors[edge.direction]:
+    game.placement?'crosshair':game.hoverTarget?'pointer':'grab';
   const reticle=byId('target-cursor');
-  const targeting=Boolean(mapPointer && !selectionDrag?.active && !mouseDrag?.active && !game.placement &&
+  const targeting=Boolean(mapPointer && !selecting && !dragging && !edge && !game.placement &&
     playerCanCommand() && game.selection.some(unit=>unit.team==='player' && unit.health>0 && WEAPONS[unit.type]));
   map.classList.toggle('targeting',targeting);
   reticle.hidden=!targeting;
@@ -6416,8 +6435,7 @@ function attachPlayerControls() {
     } else construction.append(purchaseButton(type,spec));
   }
   byId('deploy-base').addEventListener('click',()=>{
-    const unit=deployCandidate();
-    if (unit) void sendPlayerOrder({kind:'deploy',source:unit.viewId},'基地车开始部署。');
+    deployBaseVehicle(deployCandidate());
   });
   construction.addEventListener('click',event=>{
     const button=event.target.closest('button[data-type]');
@@ -6585,16 +6603,23 @@ function pan(dx,dy) {
   game.follow=null;
 }
 
-function scrollMapAtEdge(dt) {
+function edgeScrollDirection() {
   if (!edgeScrollPointer || document.hidden || touches.size || mouseDrag || selectionDrag ||
-      document.querySelector('dialog[open]')) return;
+      document.querySelector('dialog[open]')) return null;
   const bounds=map.getBoundingClientRect();
   const x=edgeScrollPointer.x-bounds.left,y=edgeScrollPointer.y-bounds.top;
-  if (x<0 || x>bounds.width || y<0 || y>bounds.height) return;
+  if (x<0 || x>bounds.width || y<0 || y>bounds.height) return null;
   const margin=Math.min(26,bounds.width/4,bounds.height/4);
   const direction=(position,size)=>Math.max(0,1-(size-position)/margin)-Math.max(0,1-position/margin);
   const dx=direction(x,bounds.width),dy=direction(y,bounds.height);
-  if ((!dx && !dy) || document.elementFromPoint(edgeScrollPointer.x,edgeScrollPointer.y)!==map) return;
+  if ((!dx && !dy) || document.elementFromPoint(edgeScrollPointer.x,edgeScrollPointer.y)!==map) return null;
+  return {dx,dy,direction:(dy<0?'n':dy>0?'s':'')+(dx<0?'w':dx>0?'e':'')};
+}
+
+function scrollMapAtEdge(dt) {
+  const edge=edgeScrollDirection();
+  if (!edge) return;
+  const {dx,dy}=edge;
   const speed=500*dt/Math.max(1,Math.hypot(dx,dy));
   pan(dx*speed,dy*speed);
 }
@@ -6792,7 +6817,6 @@ function updateMapPointer(point) {
       placement.valid=canPlace({...tile,type:placement.type,team:'player',width,height,axis:placement.axis});
     }
   }
-  map.style.cursor=placement?'crosshair':game.hoverTarget?'pointer':'grab';
   syncPlayerPointer();
 }
 
@@ -6984,7 +7008,7 @@ document.addEventListener('keydown',event=>{
     return;
   }
   if (event.repeat) return;
-  const shortcuts={f:focusUnit,h:focusBase,escape:()=>selectUnit(null)};
+  const shortcuts={f:focusUnit,h:focusBase,d:()=>deployBaseVehicle(game.selected),escape:()=>selectUnit(null)};
   const action=shortcuts[event.key.toLowerCase()];
   if (action) {
     event.preventDefault();

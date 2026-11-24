@@ -486,7 +486,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=edge-scroll';
+  script.src = 'game.js?v=edge-cursor';
   document.head.append(script);
 }
 bootObserver();
