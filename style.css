@@ -596,15 +596,17 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
 .room-colors { display:grid;grid-template-columns:repeat(8,1fr);gap:7px; }
 .room-colors button { height:26px;border:1px solid #d6e1c277;border-radius:4px; }
 .room-colors button:disabled { opacity:.18; }
-.roster-details { margin-left:auto;min-width:0; }
-.roster-details[open] { flex:1 0 100%;margin-left:0; }
-.roster-details summary { font-size:12px;cursor:pointer; }
-#room-roster { max-height:170px;overflow:auto;scrollbar-width:thin;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:3px;padding-top:6px; }
+.roster-toggle { margin-left:auto;min-height:24px;font-size:11px; }
+.roster-popover { position:fixed;inset:auto;margin:0;width:min(360px,calc(100vw - 16px));box-sizing:border-box;padding:10px;color:#e3e9d9;background:linear-gradient(145deg,#323f2e,#18251d);border:1px solid #7c9069;border-radius:6px;box-shadow:0 12px 36px #0009; }
+.roster-popover header { display:flex;align-items:center;justify-content:space-between;gap:12px;padding-bottom:8px;border-bottom:1px solid #58664b; }
+.roster-popover h3 { margin:0;font-size:13px; }
+.roster-popover header button { min-width:26px;min-height:26px;padding:0;font-size:18px; }
+#room-roster { max-height:min(320px,calc(100dvh - 180px));overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;display:grid;gap:3px;padding-top:6px; }
 .roster-row { width:100%;display:grid;grid-template-columns:10px minmax(0,1fr);gap:3px 6px;text-align:left;border:0;background:#1c281d88;padding:5px;font-size:11px; }
 .roster-row i { width:8px;height:8px;border-radius:2px;margin-top:3px; }
 .roster-row span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .roster-row small { grid-column:2;color:#a9b89d;font-size:10px; }
-@media(max-width:760px) { .battlefield {grid-template-rows:auto minmax(0,1fr) 29px;} .map-top-actions{flex-wrap:wrap;gap:8px;} .room-strip{font-size:10px;} #room-roster{max-height:100px;} }
+@media(max-width:760px) { .battlefield {grid-template-rows:auto minmax(0,1fr) 29px;} .map-top-actions{flex-wrap:wrap;gap:8px;} .room-strip{font-size:10px;} }
 
 .profile-label { font-size:13px; }
 .room-theme-choices { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }

@@ -7093,7 +7093,7 @@ document.addEventListener('fullscreenchange',()=>{
   byId('fullscreen').querySelector('.header-label').textContent=document.fullscreenElement?'退出全屏':'全屏';
 });
 document.addEventListener('keydown',event=>{
-  if (document.querySelector('dialog[open]') || event.altKey || event.metaKey || event.isComposing ||
+  if (document.querySelector('dialog[open], [popover]:popover-open') || event.altKey || event.metaKey || event.isComposing ||
       event.target.closest?.('select,input,textarea,[contenteditable]')) return;
   if (/^[0-9]$/.test(event.key) && playerCanCommand()) {
     event.preventDefault();

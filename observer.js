@@ -59,7 +59,7 @@ function updateRoomRoster() {
     const name=document.createElement('span');name.textContent=p.name+(p.id===observedMatch.self.team?'（我）':'')+' · '+(p.bot?'机器人':'人类');
     const counts=document.createElement('small');counts.textContent=(p.units===null?'未侦察':p.buildings+' 建筑 / '+p.units+' 单位')+' · '+(BUILDING_THEMES[p.theme]?.label??'');
     row.append(swatch,name,counts);row.title=p.name+' · '+(p.bot?'机器人':'人类')+' · '+(BUILDING_THEMES[p.theme]?.label??'')+'；点击定位已知位置';
-    row.addEventListener('click',()=>{const entity=structures.find(b=>b.team===p.id)??units.find(u=>u.team===p.id);if(entity)centerCamera(entity.width?yardCenter(entity):entity);else notice('当前没有该方的已知位置。');});
+    row.addEventListener('click',()=>{const entity=structures.find(b=>b.team===p.id)??units.find(u=>u.team===p.id);if(entity)centerCamera(entity.width?yardCenter(entity):entity);else notice('当前没有该方的已知位置。');byId('roster-popover').hidePopover();});
     return row;
   }));
   byId('roster-count').textContent=String(people.filter(p=>p.status==='active').length);
@@ -281,6 +281,15 @@ function openRoomForm(mode) {
   byId('room-dialog').showModal();
 }
 function attachRoomControls() {
+  const roster=byId('roster-popover'),rosterToggle=byId('roster-toggle');
+  const positionRoster=()=>{
+    const anchor=rosterToggle.getBoundingClientRect(),width=roster.offsetWidth||Math.min(360,innerWidth-16),height=roster.offsetHeight;
+    roster.style.left=Math.max(8,Math.min(anchor.right-width,innerWidth-width-8))+'px';
+    roster.style.top=(anchor.bottom+8+height<=innerHeight-8?anchor.bottom+8:Math.max(8,anchor.top-height-8))+'px';
+  };
+  roster.addEventListener('beforetoggle',event=>{if(event.newState==='open')positionRoster();});
+  roster.addEventListener('toggle',event=>{if(event.newState==='open')positionRoster();rosterToggle.setAttribute('aria-expanded',String(event.newState==='open'));});
+  window.addEventListener('resize',()=>{if(roster.matches(':popover-open'))positionRoster();});
   const choices=[[RANDOM_BUILDING_THEME,{label:'每局随机'}],...Object.entries(BUILDING_THEMES)];
   byId('room-theme-choices').replaceChildren(...choices.map(([id,theme])=>{
     const button=document.createElement('button');button.type='button';button.className='theme-choice';button.dataset.theme=id;button.setAttribute('role','radio');button.setAttribute('aria-checked',String(id===byId('room-theme').value));
@@ -333,7 +342,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=multiplayer-themes';
+  script.src = 'game.js?v=roster-popover';
   document.head.append(script);
 }
 bootObserver();
