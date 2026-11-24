@@ -221,6 +221,7 @@ const touches = new Map();
 let mouseDrag = null;
 let selectionDrag = null;
 let mapPointer = null;
+let edgeScrollPointer = null;
 const controlGroups=Array.from({length:10},()=>[]);
 const controlGroupStorage='ore-command-control-groups';
 let lastFrame = 0;
@@ -897,7 +898,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=map-exploration');
+      const worker=new Worker('terrain-worker.js?v=edge-scroll');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -6584,6 +6585,20 @@ function pan(dx,dy) {
   game.follow=null;
 }
 
+function scrollMapAtEdge(dt) {
+  if (!edgeScrollPointer || document.hidden || touches.size || mouseDrag || selectionDrag ||
+      document.querySelector('dialog[open]')) return;
+  const bounds=map.getBoundingClientRect();
+  const x=edgeScrollPointer.x-bounds.left,y=edgeScrollPointer.y-bounds.top;
+  if (x<0 || x>bounds.width || y<0 || y>bounds.height) return;
+  const margin=Math.min(26,bounds.width/4,bounds.height/4);
+  const direction=(position,size)=>Math.max(0,1-(size-position)/margin)-Math.max(0,1-position/margin);
+  const dx=direction(x,bounds.width),dy=direction(y,bounds.height);
+  if ((!dx && !dy) || document.elementFromPoint(edgeScrollPointer.x,edgeScrollPointer.y)!==map) return;
+  const speed=500*dt/Math.max(1,Math.hypot(dx,dy));
+  pan(dx*speed,dy*speed);
+}
+
 function clampCamera() {
   const view=project(camera.x,camera.y);
   const marginX=Math.min((BOARD.right-BOARD.left)/2,viewport.w/(2*viewport.scale));
@@ -6623,6 +6638,16 @@ function focusUnit() {
       focusUnit();
     }
   }
+}
+
+function focusBase() {
+  edgeScrollPointer=null;
+  const buildings=structures.filter(building=>building.team===game.perspective && building.type==='yard' && building.health>0);
+  const yard=buildings.find(building=>!building.remaining)??buildings[0];
+  const vehicle=units.find(unit=>unit.team===game.perspective && unit.type==='mcv' && unit.health>0);
+  const destination=yard?yardCenter(yard):vehicle;
+  if (destination) centerCamera(destination);
+  else notice('当前没有可定位的基地或基地车。');
 }
 
 function screenPoint(event, element=map) {
@@ -6754,6 +6779,23 @@ function selectBox(drag) {
   }));
 }
 
+function updateMapPointer(point) {
+  game.hoverTarget=mapEntityAt(point);
+  mapPointer=point;
+  const placement=game.placement;
+  if (placement) {
+    const world=worldAt(point.x,point.y);
+    const tile={x:Math.round(world.x),y:Math.round(world.y)};
+    if (!sameTile(placement.tile,tile)) {
+      const {width,height}=BUILDINGS[placement.type];
+      placement.tile=tile;
+      placement.valid=canPlace({...tile,type:placement.type,team:'player',width,height,axis:placement.axis});
+    }
+  }
+  map.style.cursor=placement?'crosshair':game.hoverTarget?'pointer':'grab';
+  syncPlayerPointer();
+}
+
 if (!ENGINE_ONLY) {
 map.addEventListener('pointerdown',event=>{
   const p=screenPoint(event);
@@ -6763,7 +6805,8 @@ map.addEventListener('pointerdown',event=>{
     map.setPointerCapture(event.pointerId);
     return;
   }
-  if (event.button===0 && (event.shiftKey || playerCanCommand())) {
+  if (event.button===0 && (event.shiftKey ||
+      playerCanCommand() && (game.selection.length>0 || mapEntityAt(p)))) {
     selectionDrag={pointerId:event.pointerId,start:p,end:p,active:false};
   } else if (event.button===0 || event.button===1) {
     event.preventDefault();
@@ -6785,6 +6828,7 @@ map.addEventListener('pointermove',event=>{
     touch.y=p.y;
     return;
   }
+  if (event.pointerType!=='touch') edgeScrollPointer={x:event.clientX,y:event.clientY};
   if (mouseDrag?.pointerId===event.pointerId) {
     const {start,previous}=mouseDrag;
     mouseDrag.active||=Math.hypot(p.x-start.x,p.y-start.y)>=5;
@@ -6809,21 +6853,7 @@ map.addEventListener('pointermove',event=>{
       return;
     }
   }
-  const entity=mapEntityAt(p);
-  game.hoverTarget=entity;
-  mapPointer=p;
-  const placement=game.placement;
-  if (placement) {
-    const world=worldAt(p.x,p.y);
-    const tile={x:Math.round(world.x),y:Math.round(world.y)};
-    if (!sameTile(placement.tile,tile)) {
-      const {width,height}=BUILDINGS[placement.type];
-      placement.tile=tile;
-      placement.valid=canPlace({...tile,type:placement.type,team:'player',width,height,axis:placement.axis});
-    }
-  }
-  map.style.cursor=placement?'crosshair':entity?'pointer':'grab';
-  syncPlayerPointer();
+  updateMapPointer(p);
 });
 
 map.addEventListener('pointerup',event=>{
@@ -6852,6 +6882,7 @@ map.addEventListener('pointercancel',event=>{
   touches.delete(event.pointerId);
   mouseDrag=null;
   selectionDrag=null;
+  edgeScrollPointer=null;
 });
 map.addEventListener('lostpointercapture',event=>{
   if (selectionDrag?.pointerId===event.pointerId) selectionDrag=null;
@@ -6863,8 +6894,20 @@ map.addEventListener('lostpointercapture',event=>{
 map.addEventListener('pointerleave',event=>{
   if (!byId('deploy-base').contains(event.relatedTarget)) game.hoverTarget=null;
   mapPointer=null;
+  edgeScrollPointer=null;
   syncPlayerPointer();
 });
+map.addEventListener('wheel',event=>{
+  if (event.ctrlKey || document.querySelector('dialog[open]')) return;
+  event.preventDefault();
+  edgeScrollPointer=null;
+  const scaleX=event.deltaMode===1?16:event.deltaMode===2?viewport.w:1;
+  const scaleY=event.deltaMode===1?16:event.deltaMode===2?viewport.h:1;
+  const dx=event.shiftKey?event.deltaX*scaleX+event.deltaY*scaleY:event.deltaX*scaleX;
+  const dy=event.shiftKey?0:event.deltaY*scaleY;
+  pan(dx,dy);
+  updateMapPointer(screenPoint(event));
+},{passive:false});
 view.addEventListener('contextmenu',event=>{
   event.preventDefault();
   selectionDrag=null;
@@ -6924,24 +6967,24 @@ document.addEventListener('fullscreenchange',()=>{
   byId('fullscreen').querySelector('.header-label').textContent=document.fullscreenElement?'退出全屏':'全屏';
 });
 document.addEventListener('keydown',event=>{
-  if (document.querySelector('dialog[open]') || event.altKey || event.ctrlKey || event.metaKey || event.isComposing ||
+  if (document.querySelector('dialog[open]') || event.altKey || event.metaKey || event.isComposing ||
       event.target.closest?.('select,input,textarea,[contenteditable]')) return;
   if (/^[0-9]$/.test(event.key) && playerCanCommand()) {
     event.preventDefault();
     if (event.repeat) return;
     const number=Number(event.key);
-    const selection=game.selection.filter(ownGroupUnit);
-    if (selection.length) saveControlGroup(number,selection);
+    if (event.ctrlKey) saveControlGroup(number,game.selection.filter(ownGroupUnit));
     else recallControlGroup(number);
     return;
   }
+  if (event.ctrlKey) return;
   if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key)) {
     event.preventDefault();
     pressed.add(event.key);
     return;
   }
   if (event.repeat) return;
-  const shortcuts={f:focusUnit,escape:()=>selectUnit(null)};
+  const shortcuts={f:focusUnit,h:focusBase,escape:()=>selectUnit(null)};
   const action=shortcuts[event.key.toLowerCase()];
   if (action) {
     event.preventDefault();
@@ -6951,6 +6994,10 @@ document.addEventListener('keydown',event=>{
 document.addEventListener('keyup',event=>pressed.delete(event.key));
 window.addEventListener('blur',()=>{
   pressed.clear();
+  edgeScrollPointer=null;
+});
+document.addEventListener('visibilitychange',()=>{
+  if (document.hidden) edgeScrollPointer=null;
 });
 }
 
@@ -7002,6 +7049,8 @@ function frame(timestamp) {
   const dt=Math.min(.046,Math.max(0,(timestamp-(lastFrame||timestamp))*.001));
   lastFrame=timestamp;
   interpolateObservation(timestamp);
+  const previousCamera={x:camera.x,y:camera.y};
+  scrollMapAtEdge(dt);
   const speed=370*dt;
   const dx=(Number(pressed.has('ArrowRight'))-Number(pressed.has('ArrowLeft')))*speed;
   const dy=(Number(pressed.has('ArrowDown'))-Number(pressed.has('ArrowUp')))*speed;
@@ -7018,6 +7067,7 @@ function frame(timestamp) {
     camera.y+=(game.follow.y-camera.y)*ease;
     clampCamera();
   }
+  if (mapPointer && (camera.x!==previousCamera.x || camera.y!==previousCamera.y)) updateMapPointer(mapPointer);
   drawWorld();
   if (timestamp>=nextRadar) {
     terrainRadar();

@@ -486,7 +486,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=map-exploration';
+  script.src = 'game.js?v=edge-scroll';
   document.head.append(script);
 }
 bootObserver();

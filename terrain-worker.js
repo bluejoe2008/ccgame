@@ -3,7 +3,7 @@
 self.onmessage=({data})=>{
   if (Object.hasOwn(data,'seed')) {
     self.matchEngine={seed:data.seed};
-    importScripts('commander.js?v=command-buttons','building-themes.js?v=4','game.js?v=map-exploration');
+    importScripts('commander.js?v=command-buttons','building-themes.js?v=4','game.js?v=edge-scroll');
     groundTexture=data.texture;
     return;
   }
