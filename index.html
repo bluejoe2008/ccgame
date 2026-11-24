@@ -7,11 +7,11 @@
   <title>C&amp;C</title>
   <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png?v=tank">
   <link rel="icon" type="image/png" sizes="64x64" href="assets/favicon-64.png?v=tank">
-  <link rel="stylesheet" href="style.css?v=tank-brand">
+  <link rel="stylesheet" href="style.css?v=box-selection">
   <script src="audio.js?v=laser-mix" defer></script>
   <script src="commander.js?v=command-buttons" defer></script>
   <script src="building-themes.js?v=4" defer></script>
-  <script src="observer.js?v=tank-and-transports" defer></script>
+  <script src="observer.js?v=box-selection" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -84,7 +84,7 @@
       </div>
       <div class="viewport" id="viewport">
         <canvas id="map-ground" aria-hidden="true"></canvas>
-        <canvas id="map" aria-label="矿区战术地图，点击单位自动跟踪，拖动地图，按住 Shift 拖动框选" tabindex="0"></canvas>
+        <canvas id="map" aria-label="战术地图，左键点击选择或下令，拖动框选单位，滚轮移动视野" tabindex="0"></canvas>
         <div id="target-cursor" class="target-cursor" aria-hidden="true" hidden><i></i></div>
         <button id="deploy-base" class="deploy-button" type="button" title="部署基地车（选中后按 D）" hidden><span aria-hidden="true">↓</span>部署</button>
         <div class="map-shade" aria-hidden="true"></div>
@@ -157,7 +157,7 @@
         <span><i class="dot oil"></i> 油田</span>
         <span><i class="dot blue"></i> 建筑</span>
         <span><i class="dot red"></i> 红方单位</span>
-        <span id="map-shortcuts" class="footer-hint">拖动地图 · Shift 拖动框选</span>
+        <span id="map-shortcuts" class="footer-hint">拖动框选 · 滚轮移动视野</span>
       </div>
     </section>
   </main>
@@ -217,7 +217,7 @@
         <div><dt>人机对战</dt><dd>点击「人机对战」指挥蓝方，红方由指挥智能体控制。对局在服务器运行，刷新页面会回到当前进度。胜负确定或点击「结束本局」后，可手动开始下一局。</dd></div>
         <div><dt>下达指令</dt><dd>左键选择或拖选单位，再左键指定目的地，包括未探索区域。地面单位会寻找可通行的路线，遇到无法到达的目的地时停在最近可达处。右键取消选择。选中工程师后点击可见油田或敌方建筑可尝试占领。选中兵工厂或兵营后点击空地可设集结点。</dd></div>
         <div><dt>编队</dt><dd>选中己方活动单位后按 Ctrl 加 0 到 9，为它们分配编号。直接按数字可召回编队。也可以点击右侧操作栏已有的编号召回。</dd></div>
-        <div><dt>视野</dt><dd>未选中部队时，可在空白地图上按住左键拖动。鼠标中键可随时拖动地图。滚轮上下移动地图，Shift 加滚轮左右移动，触控板也支持横向滚动。鼠标靠近地图边缘时自动滚屏，移回地图内部即停止。也可用方向键和小地图移动视野，按 F 跟踪所选单位，按 H 返回己方基地或尚未部署的基地车。已探开的区域持续可见。</dd></div>
+        <div><dt>视野</dt><dd>左键拖动默认框选单位，不移动地图，无需按 Shift。滚轮上下移动地图，Shift 加滚轮左右移动，触控板也支持横向滚动。鼠标靠近地图边缘时自动滚屏，移回地图内部即停止。也可用方向键和小地图移动视野，按 F 跟踪所选单位，按 H 返回己方基地或尚未部署的基地车。已探开的区域持续可见。</dd></div>
         <div><dt>建造和收入</dt><dd>双方开局各配发 1 辆基地车、2 辆坦克和 3 名步兵。鼠标移到基地车上，点击旁边的「部署」，或选中基地车后按 D。选中已启用的己方建筑后，点一下建筑按钮，再点击地图上的空地。点击单位按钮可直接加入生产队列。包括已占领油田在内的己方建筑都提供 10 格建造半径。精炼厂会配发一辆矿车，找不到已知矿点时矿车会自行开到迷雾边缘探矿。油田满供电时每 15 秒提供 280 储备，首次占领奖励 260。选中己方建筑后可在右侧点击「出售」，按剩余耐久折价回收一半造价，并退回已付款生产的未完成部分。</dd></div>
         <div><dt>防御和兵种</dt><dd>装甲碉堡减伤较高，激光塔射程较远，城墙阻挡地面通行。选择有武器的单位或建筑可查看减伤和反击射程。金色边界标出射程，内圈标出火炮近距离盲区。</dd></div>
         <div><dt>电力与生产</dt><dd>点击单位按钮即可排队。设施完工后按下单顺序开工，有足够储备才扣款生产，未开工的订单可以取消。多座兵工厂可并行生产。满供电时，每多一座已建成的兵工厂，所有兵工厂的生产速度提高 20%，加成上限为 60%。</dd></div>

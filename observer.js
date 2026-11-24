@@ -65,7 +65,7 @@ function updateMatchControls() {
   const human=observedMatch?.mode==='human' && running;
   byId('map-heading').textContent=human?'玩家蓝方 / 智能体红方':'观战';
   byId('view-red').disabled=human;
-  byId('map-shortcuts').textContent=human?'左键下令或拖选 · 右键取消 · 中键拖地图':'拖动地图 · Shift 拖动框选';
+  byId('map-shortcuts').textContent=human?'左键下令 · 拖动框选 · 右键取消':'拖动框选 · 滚轮移动视野';
   byId('start-session').disabled = running || !observerConnected || pendingControl;
   byId('end-session').disabled = !running || !observerConnected || pendingControl;
   updateBuildingStyleControls();
@@ -486,7 +486,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=tank-and-transports';
+  script.src = 'game.js?v=box-selection';
   document.head.append(script);
 }
 bootObserver();

@@ -126,7 +126,7 @@ h1,h2 { margin: 0; }
 .viewport { grid-area: map; position: relative; min-width: 0; min-height: 0; overflow: hidden; background: #141a15; }
 #map-ground, .map-shade { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .map-shade { background: radial-gradient(ellipse at 51% 47%, #10171000 32%, #11191076 100%); }
-#map { position: relative; display: block; width: 100%; height: 100%; outline-offset: -3px; cursor: grab; touch-action: none; }
+#map { position: relative; display: block; width: 100%; height: 100%; outline-offset: -3px; cursor: crosshair; touch-action: none; }
 .map-hud {
   position: absolute;
   display: flex;

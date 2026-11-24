@@ -217,8 +217,6 @@ const game = {
   follow:null, notice:'', noticeUntil:0, radarLayout:null, firstEngagement:false,
 };
 const pressed = new Set();
-const touches = new Map();
-let mouseDrag = null;
 let selectionDrag = null;
 let mapPointer = null;
 let edgeScrollPointer = null;
@@ -930,7 +928,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=tank-and-transports');
+      const worker=new Worker('terrain-worker.js?v=box-selection');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -6430,12 +6428,11 @@ function syncPlayerPointer() {
     deploy.style.transform='translate('+Math.round(x)+'px,'+Math.round(y)+'px)';
   }
   const edge=edgeScrollDirection();
-  const dragging=mouseDrag?.active;
   const selecting=selectionDrag?.active;
-  map.style.cursor=dragging?'grabbing':selecting?'crosshair':edge?edgeScrollCursors[edge.direction]:
-    game.placement?'crosshair':game.hoverTarget?'pointer':'grab';
+  map.style.cursor=selecting?'crosshair':edge?edgeScrollCursors[edge.direction]:
+    game.placement?'crosshair':game.hoverTarget?'pointer':'crosshair';
   const reticle=byId('target-cursor');
-  const targeting=Boolean(mapPointer && !selecting && !dragging && !edge && !game.placement &&
+  const targeting=Boolean(mapPointer && !selecting && !edge && !game.placement &&
     playerCanCommand() && game.selection.some(unit=>unit.team==='player' && unit.health>0 && WEAPONS[unit.type]));
   map.classList.toggle('targeting',targeting);
   reticle.hidden=!targeting;
@@ -6677,7 +6674,7 @@ function syncHud() {
   if (unit) focus.setAttribute('aria-pressed',String(Boolean(game.follow)));
   else focus.removeAttribute('aria-pressed');
   focus.title=(game.follow?'停止跟踪':focusLabel)+'（F）';
-  const hint=playerCanCommand()?'左键选择或下令 · 右键取消':factionName(game.perspective)+'视角 · 拖动地图或点击小地图';
+  const hint=playerCanCommand()?'左键选择或下令 · 拖动框选 · 右键取消':factionName(game.perspective)+'视角 · 拖动框选 · 滚轮移动视野';
   byId('instruction').textContent=(game.noticeUntil>game.time && game.notice) ||
     (game.follow?'跟踪中 · '+factionName(game.follow.team)+game.follow.label:hint);
   syncCommanderHud();
@@ -6715,7 +6712,7 @@ function pan(dx,dy) {
 }
 
 function edgeScrollDirection() {
-  if (!edgeScrollPointer || document.hidden || touches.size || mouseDrag || selectionDrag ||
+  if (!edgeScrollPointer || document.hidden || selectionDrag ||
       document.querySelector('dialog[open]')) return null;
   const bounds=map.getBoundingClientRect();
   const x=edgeScrollPointer.x-bounds.left,y=edgeScrollPointer.y-bounds.top;
@@ -6933,49 +6930,22 @@ function updateMapPointer(point) {
 
 if (!ENGINE_ONLY) {
 map.addEventListener('pointerdown',event=>{
-  const p=screenPoint(event);
-  if (event.pointerType==='touch') {
-    if (touches.size) for (const touch of touches.values()) touch.moved=true;
-    touches.set(event.pointerId,{...p,startX:p.x,startY:p.y,moved:touches.size>0});
-    map.setPointerCapture(event.pointerId);
+  if (event.button!==0) {
+    if (event.button===1) event.preventDefault();
     return;
   }
-  if (event.button===0 && (event.shiftKey ||
-      playerCanCommand() && (game.selection.length>0 || mapEntityAt(p)))) {
-    selectionDrag={pointerId:event.pointerId,start:p,end:p,active:false};
-  } else if (event.button===0 || event.button===1) {
-    event.preventDefault();
-    mouseDrag={pointerId:event.pointerId,start:p,previous:p,active:event.button===1};
-    if (mouseDrag.active) map.style.cursor='grabbing';
-  } else return;
+  if (selectionDrag) return;
+  event.preventDefault();
+  const p=screenPoint(event);
+  selectionDrag={pointerId:event.pointerId,start:p,end:p,active:false};
+  edgeScrollPointer=null;
   map.setPointerCapture(event.pointerId);
 });
 
 map.addEventListener('pointermove',event=>{
+  if (selectionDrag && selectionDrag.pointerId!==event.pointerId) return;
   const p=screenPoint(event);
-  const touch=touches.get(event.pointerId);
-  if (touch) {
-    if (touches.size===1 && (touch.moved || Math.hypot(p.x-touch.startX,p.y-touch.startY)>8)) {
-      pan(touch.x-p.x,touch.y-p.y);
-      touch.moved=true;
-    }
-    touch.x=p.x;
-    touch.y=p.y;
-    return;
-  }
   if (event.pointerType!=='touch') edgeScrollPointer={x:event.clientX,y:event.clientY};
-  if (mouseDrag?.pointerId===event.pointerId) {
-    const {start,previous}=mouseDrag;
-    mouseDrag.active||=Math.hypot(p.x-start.x,p.y-start.y)>=5;
-    if (mouseDrag.active) {
-      map.style.cursor='grabbing';
-      game.hoverTarget=null;
-      mapPointer=null;
-      pan(previous.x-p.x,previous.y-p.y);
-      mouseDrag.previous=p;
-    }
-    return;
-  }
   if (selectionDrag?.pointerId===event.pointerId) {
     selectionDrag.end={x:Math.max(0,Math.min(viewport.w,p.x)),y:Math.max(0,Math.min(viewport.h,p.y))};
     const {start,end}=selectionDrag;
@@ -6992,20 +6962,8 @@ map.addEventListener('pointermove',event=>{
 });
 
 map.addEventListener('pointerup',event=>{
+  if (event.button!==0 || selectionDrag?.pointerId!==event.pointerId) return;
   const p=screenPoint(event);
-  const touch=touches.get(event.pointerId);
-  if (touch) {
-    touches.delete(event.pointerId);
-    if (!touch.moved) mapClick(p);
-    return;
-  }
-  if (mouseDrag?.pointerId===event.pointerId) {
-    const moved=mouseDrag.active;
-    mouseDrag=null;
-    map.style.cursor='grab';
-    if (moved || event.button!==0) return;
-  }
-  if (event.button!==0) return;
   const drag=selectionDrag;
   selectionDrag=null;
   if (drag?.active) selectBox(drag);
@@ -7014,17 +6972,13 @@ map.addEventListener('pointerup',event=>{
   syncPlayerPointer();
 });
 map.addEventListener('pointercancel',event=>{
-  touches.delete(event.pointerId);
-  mouseDrag=null;
-  selectionDrag=null;
+  if (selectionDrag?.pointerId===event.pointerId) selectionDrag=null;
   edgeScrollPointer=null;
+  syncPlayerPointer();
 });
 map.addEventListener('lostpointercapture',event=>{
   if (selectionDrag?.pointerId===event.pointerId) selectionDrag=null;
-  if (mouseDrag?.pointerId===event.pointerId) {
-    mouseDrag=null;
-    map.style.cursor='grab';
-  }
+  syncPlayerPointer();
 });
 map.addEventListener('pointerleave',event=>{
   if (!byId('deploy-base').contains(event.relatedTarget)) game.hoverTarget=null;
