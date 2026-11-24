@@ -6,6 +6,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "start": "node server.cjs"
+    "start": "node server.cjs",
+    "test": "node --test --test-concurrency=1 test/*.test.cjs"
   }
 }

@@ -578,3 +578,39 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
 @media (max-width: 400px) {
   .map-coords { display: none; }
 }
+
+/* Room controls remain in the fixed header and right dock. */
+.battlefield { grid-template-rows:auto minmax(0,1fr) 34px; }
+.map-top { flex-wrap:wrap;gap:8px 12px;padding-block:8px; }
+.map-label { flex-wrap:wrap; }
+.room-strip { flex:1 0 100%;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:#c6d2b5; }
+#idle-warning { color:#ffc888; }
+.room-form { display:grid;gap:14px;padding:20px; }
+.room-form label { display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:13px; }
+.room-form input, .room-form select { width:64%;background:#142019;color:#e3e9d9;border:1px solid #66785d;border-radius:4px;padding:9px;font:inherit; }
+.room-form input[type=color] { height:38px;padding:3px; }
+.room-form input[type=number] { width:90px; }
+.room-form fieldset { display:grid;gap:12px;border:1px solid #586950;padding:12px; }
+.room-form p { margin:0;color:#b6c2a7;font-size:12px;line-height:1.6; }
+.room-form #room-form-error { color:#ffc39c; }
+.room-colors { display:grid;grid-template-columns:repeat(8,1fr);gap:7px; }
+.room-colors button { height:26px;border:1px solid #d6e1c277;border-radius:4px; }
+.room-colors button:disabled { opacity:.18; }
+.roster-details summary { font-size:12px;cursor:pointer; }
+#room-roster { max-height:170px;overflow:auto;scrollbar-width:thin;display:grid;gap:3px;padding-top:6px; }
+.roster-row { width:100%;display:grid;grid-template-columns:10px minmax(0,1fr);gap:3px 6px;text-align:left;border:0;background:#1c281d88;padding:5px;font-size:11px; }
+.roster-row i { width:8px;height:8px;border-radius:2px;margin-top:3px; }
+.roster-row span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.roster-row small { grid-column:2;color:#a9b89d;font-size:10px; }
+@media(max-width:760px) { .battlefield {grid-template-rows:auto minmax(0,1fr) 29px;} .map-top-actions{flex-wrap:wrap;gap:8px;} .room-strip{font-size:10px;} #room-roster{max-height:100px;} }
+
+.profile-label { font-size:13px; }
+.room-theme-choices { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px; }
+.theme-choice { display:grid;grid-template-rows:58px auto;gap:3px;padding:6px;border:1px solid #4a6047;border-radius:5px;background:#18231b;color:#c5d0b9;font-size:11px; }
+.theme-choice img { width:100%;height:58px;object-fit:contain; }
+.theme-choice b { font:36px/58px Arial;color:#c7b888; }
+.theme-choice[aria-checked=true] { border-color:#cbdcab;background:#34442a;box-shadow:inset 0 0 0 1px #cbdcab; }
+
+.map-label h2 {max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.unit-status {flex-wrap:wrap;gap:5px;}
+.unit-status strong, .building-info h3 {min-width:0;overflow-wrap:anywhere;}

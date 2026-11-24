@@ -1,6 +1,6 @@
 'use strict';
 
-const DEFAULT_BUILDING_THEME='mountain';
+const DEFAULT_BUILDING_THEME='classic';
 const RANDOM_BUILDING_THEME='random';
 const BUILDING_WIDTHS={yard:205,refinery:232,factory:205,repairDepot:188,barracks:163,airport:270,
   oil:148,sentry:82,turret:157,bunker:155,wall:56,laser:132,solar:147,diesel:199,recreation:152,training:201};
@@ -19,19 +19,20 @@ const BUILDING_THEMES={
     stacks:{diesel:[[.80,.05],[.87,.02]],refinery:[[.395,.04]]},
     rotors:{oil:[.567,.593]},
   },
-  mountain:{
-    label:'红军年代', prefix:'mountain-',
-    widths:{sentry:77,turret:155,bunker:135,wall:59,laser:96,solar:113,recreation:136},
-    laser:{aspect:360/185,emitter:[.45,.245]},
-    lights:{
-      yard:[[.46,.70],[.55,.75]], factory:[[.47,.52],[.60,.54]], repairDepot:[[.44,.44],[.64,.54]],
-      refinery:[[.65,.61],[.88,.60]], barracks:[[.45,.32],[.65,.36]],
-      airport:[[.06,.80],[.17,.64],[.35,.40],[.48,.92],[.70,.62],[.83,.38]],
-      solar:[[.39,.82]], diesel:[[.54,.76],[.67,.72],[.74,.74]], oil:[[.63,.48]],
-      sentry:[[.43,.38]], turret:[[.39,.43]], bunker:[[.58,.49]], recreation:[[.132,.48],[.66,.51]], training:[[.51,.85]],
-    },
-    stacks:{diesel:[[.096,.092],[.19,.102]],refinery:[[.075,.022],[.167,.091]]},
-    rotors:{oil:[.22,.62],diesel:[.72,.74]},
+  europe:{
+    label:'欧洲小镇',prefix:'europe-',widths:{yard:215,barracks:172,refinery:232,factory:213,repairDepot:192,airport:280,sentry:78,laser:112,recreation:159,wall:60},
+    laser:{aspect:400/293,emitter:[.33,.11]},
+    lights:{yard:[[.42,.55],[.65,.57]],barracks:[[.43,.55]],factory:[[.49,.59]],repairDepot:[[.48,.63]],
+      refinery:[[.42,.64]],airport:[[.27,.74],[.46,.84],[.69,.66]],solar:[[.55,.54]],diesel:[[.43,.58]],
+      sentry:[[.48,.40]],turret:[[.50,.40]],bunker:[[.46,.64]],recreation:[[.39,.59]],training:[[.55,.62]],oil:[[.58,.64]]},
+    stacks:{diesel:[[.36,.08],[.54,.11]],refinery:[[.42,.11]]},rotors:{oil:[.47,.42]},
+  },
+  space:{
+    label:'太空战队',prefix:'space-',widths:{yard:215,factory:216,refinery:235,repairDepot:196,barracks:173,airport:284,sentry:79,laser:111,recreation:156,wall:60},
+    laser:{aspect:400/300,emitter:[.69,.12]},lights:{yard:[[.4,.65],[.64,.64]],factory:[[.35,.66],[.66,.66]],refinery:[[.44,.58]],repairDepot:[[.4,.67],[.6,.67]],
+      barracks:[[.45,.59]],airport:[[.2,.77],[.45,.85],[.69,.64]],solar:[[.5,.6]],diesel:[[.5,.52]],oil:[[.5,.53]],
+      sentry:[[.5,.4]],turret:[[.5,.38]],bunker:[[.4,.62],[.6,.62]],recreation:[[.47,.55]],training:[[.5,.63]]},
+    stacks:{refinery:[[.34,.12]],diesel:[[.5,.1]]},rotors:{},
   },
   qinhan:{
     label:'秦汉古风', prefix:'qinhan-',
@@ -90,7 +91,7 @@ function resolveBuildingTheme(theme) {
 }
 
 function buildingThemeAsset(id,type,tint,axis) {
-  if (tint==='neutral') return 'mountain-oil-neutral';
+  if (tint==='neutral') return 'oil-neutral';
   const theme=BUILDING_THEMES[id];
   const variant=type==='wall'?'wall-'+(axis==='y'?'y':'x'):theme.repairMark && type==='repairDepot'?'yard':type;
   return theme.prefix+variant+'-'+tint;

@@ -1,10 +1,8 @@
 'use strict';
 
 let observedMatch;
-let lastLog = 0;
 let lastSound = null;
 let pendingControl = false;
-let pendingBuildingStyle = false;
 let playerOrderRequests = Promise.resolve();
 let observerConnected = true;
 let observationRequest = 0;
@@ -17,75 +15,77 @@ const motionDelay = 220;
 const linearPoseFields = ['x','y','travel','stride','gaitCycles','lean','altitude'];
 const angularPoseFields = ['heading','turretHeading'];
 const poseFields = [...linearPoseFields,...angularPoseFields];
-const historyKey = 'ore-command-open-history';
-let historyPage = [];
-let historyBefore = null;
-let historyRequest = 0;
-
-function rememberHistory(round) {
-  try {
-    if (round === null) sessionStorage.removeItem(historyKey);
-    else sessionStorage.setItem(historyKey,String(round));
-  } catch {}
-}
-
-function savedPerspective() {
-  try {
-    return sessionStorage.getItem('ore-command-perspective') === 'enemy' ? 'enemy' : 'player';
-  } catch {
-    return 'player';
-  }
-}
-
-async function fetchObservation(team) {
-  const response = await fetch('/api/match?perspective=' + team, { cache: 'no-store', signal: AbortSignal.timeout(9000) });
+async function fetchObservation() {
+  const response = await fetch('/api/match', { cache: 'no-store', signal: AbortSignal.timeout(9000) });
   if (!response.ok) throw new Error('Match unavailable');
   return response.json();
 }
 
 function battleClock(seconds) {
-  const elapsed=Math.floor(seconds);
-  return String(Math.floor(elapsed/60)).padStart(2,'0') + ':' + String(elapsed%60).padStart(2,'0');
+  const elapsed=Math.max(0,Math.floor(seconds));
+  return [Math.floor(elapsed/3600),Math.floor(elapsed/60)%60,elapsed%60].map(n=>String(n).padStart(2,'0')).join(':');
 }
-
 function playerCanCommand() {
-  return observedMatch?.mode==='human' && observedMatch.status==='running' &&
-    game.perspective==='player' && observerConnected;
+  return observedMatch?.status==='running' && observedMatch.self?.role==='player' &&
+    observedMatch.self.team===game.perspective && observerConnected;
 }
-
 function updateMatchControls() {
-  const clock=battleClock(observedMatch?.time??0);
-  const statuses = { idle:'等待开始', running:'进行中', ended:'已结束', finished:'已分胜负' };
-  const number=observedMatch?.round?'第 '+observedMatch.round+' 局 · ':'';
-  const running = observedMatch?.status === 'running';
-  const results={player:'蓝方获胜',enemy:'红方获胜',draw:'平局'};
-  const winner=results[observedMatch?.outcome];
-  const status=(winner??statuses[observedMatch?.status]??'连接中')+' · '+clock;
-  byId('match-clock').textContent=number+(observerConnected?status:'重连中 · '+clock);
-  const human=observedMatch?.mode==='human' && running;
-  byId('map-heading').textContent=human?'玩家蓝方 / 智能体红方':'观战';
-  byId('view-red').disabled=human;
-  byId('map-shortcuts').textContent=human?'左键下令 · 拖动框选 · 右键取消':'拖动框选 · 滚轮移动视野';
-  byId('start-session').disabled = running || !observerConnected || pendingControl;
-  byId('end-session').disabled = !running || !observerConnected || pendingControl;
-  updateBuildingStyleControls();
+  const state=observedMatch,self=state?.self,stats=state?.stats;
+  const statuses={idle:'等待创建',running:'进行中',ended:'手动结束',finished:'已分胜负'};
+  const winner=state?.participants.find(p=>p.id===state.outcome);
+  byId('match-clock').textContent='第 '+(state?.round??1)+' 局 · '+(observerConnected?(winner?winner.name+' 获胜':statuses[state?.status]??'连接中'):'重连中')+' · '+battleClock(state?.durationSeconds??0);
+  byId('map-heading').textContent=self?.role==='player'&&state.status==='running'?self.name+' / 玩家':'全局观察者';
+  byId('start-session').disabled=!self?.canCreate||!observerConnected||pendingControl;
+  byId('join-session').disabled=!self?.canJoin||!observerConnected||pendingControl;
+  byId('join-session').hidden=state?.status!=='running'||self?.role==='player';
+  byId('end-session').disabled=!self?.canEnd||!observerConnected||pendingControl;
+  byId('end-session').title=self?.canEnd?'手动结束，不判胜负':'仅唯一人类玩家，或无人类参战时的观察者可以结束';
+  byId('leave-session').hidden=self?.role!=='player'||state?.status!=='running';
+  byId('leave-session').disabled=pendingControl||!observerConnected;
+  byId('map-shortcuts').textContent=self?.role==='player'?'左键下令 · 拖动框选 · 右键取消':'全局观察 · 滚轮移动视野';
+  byId('room-stats').textContent=stats?(['finished','ended'].includes(state.status)?'结束时剩余 ':'当前 ')+stats.current+' / '+state.capacity+' 方（人类 '+stats.humans+' · 机器人 '+stats.bots+'） · 累计参战 '+stats.cumulative+'（人类 '+stats.cumulativeHumans+' · 机器人 '+stats.cumulativeBots+'） · 观察者 '+stats.observers:'';
+  const remaining=self?.idleRemaining;
+  byId('idle-warning').hidden=!(state?.status==='running'&&self?.role==='player'&&remaining!==null&&remaining<=60000);
+  byId('idle-warning').textContent='已有一段时间未操作，'+Math.ceil((remaining??0)/1000)+' 秒后将被移出战场。操作游戏即可取消。';
+  updateRoomRoster();
+}
+function updateRoomRoster() {
+  const roster=byId('room-roster'),people=observedMatch?.participants??[];
+  const key=JSON.stringify(people.map(p=>[p.id,p.name,p.color,p.status,p.bot,p.theme,p.units,p.buildings,p.credits]));
+  if(roster.dataset.state===key)return;roster.dataset.state=key;
+  roster.replaceChildren(...people.filter(p=>p.status==='active').map(p=>{
+    const row=document.createElement('button');row.type='button';row.className='roster-row';
+    const swatch=document.createElement('i');swatch.style.background=p.color;swatch.setAttribute('aria-hidden','true');
+    const name=document.createElement('span');name.textContent=p.name+(p.id===observedMatch.self.team?'（我）':'')+' · '+(p.bot?'机器人':'人类');
+    const counts=document.createElement('small');counts.textContent=(p.units===null?'未侦察':p.buildings+' 建筑 / '+p.units+' 单位')+' · '+(BUILDING_THEMES[p.theme]?.label??'');
+    row.append(swatch,name,counts);row.title=p.name+' · '+(p.bot?'机器人':'人类')+' · '+(BUILDING_THEMES[p.theme]?.label??'')+'；点击定位已知位置';
+    row.addEventListener('click',()=>{const entity=structures.find(b=>b.team===p.id)??units.find(u=>u.team===p.id);if(entity)centerCamera(entity.width?yardCenter(entity):entity);else notice('当前没有该方的已知位置。');});
+    return row;
+  }));
+  byId('roster-count').textContent=String(people.filter(p=>p.status==='active').length);
 }
 
 function showMatchResult(snapshot) {
-  if (snapshot.mode!=='human' || snapshot.status!=='finished' || shownResultMatch===snapshot.id) return;
-  const titles={player:'你赢了',enemy:'你输了',draw:'平局'};
-  const title=titles[snapshot.outcome];
-  if (!title) return;
-  const dialog=byId('match-result');
-  dialog.dataset.outcome=snapshot.outcome;
+  const result=snapshot.self?.result;
+  const terminal=snapshot.status==='finished'||snapshot.status==='ended';
+  const key=snapshot.id+':'+(result?.kind??snapshot.status);
+  if((!terminal&&!result)||shownResultMatch===key)return;
+  const participant=snapshot.participants.find(p=>p.id===(snapshot.self?.team??result?.team));
+  let title;
+  if(result?.kind==='idle')title='已离线退出';
+  else if(result?.kind==='left')return;
+  else if(result?.kind==='defeated')title='你输了';
+  else if(snapshot.status==='ended')title='本局已结束';
+  else if(snapshot.outcome==='draw')title='平局';
+  else title=participant?(snapshot.outcome===participant.id?'你赢了':'你输了'):(snapshot.participants.find(p=>p.id===snapshot.outcome)?.name??'胜者')+' 获胜';
+  const dialog=byId('match-result');dialog.dataset.outcome=title==='你输了'||result?.kind==='idle'?'enemy':snapshot.outcome==='draw'?'draw':'player';
   byId('match-result-title').textContent=title;
-  byId('match-result-detail').textContent='第 '+snapshot.round+' 局 · '+battleClock(snapshot.time);
-  if (!dialog.open) dialog.showModal();
-  shownResultMatch=snapshot.id;
+  byId('match-result-detail').textContent='第 '+snapshot.round+' 局 · '+battleClock(snapshot.durationSeconds)+(result?.kind==='idle'?' · 10 分钟未操作，所属单位已清除。':'');
+  if(!dialog.open)dialog.showModal();shownResultMatch=key;
 }
 
 const orderErrors={
-  inactive:'当前没有可指挥的人机对局。', invalid:'请点击地图内的有效位置。', unavailable:'所选单位或目标无法执行该指令。',
+  inactive:'当前没有可指挥的对局。',forbidden:'你没有执行此操作的权限。', invalid:'请点击地图内的有效位置。', unavailable:'所选单位或目标无法执行该指令。',
   placement:'这里无法建造。请选择范围内已探明的空地。', credits:'储备不足。', unexplored:'请先探索该区域。',
   route:'无法到达目标位置。', capture:'工程师无法接近占领目标。', transport:'请让人员靠近已落地且有空位的直升机。',
 };
@@ -114,158 +114,6 @@ function sendPlayerOrder(order,message) {
     }
   });
   return playerOrderRequests;
-}
-
-function updateBuildingStyleControls() {
-  for (const team of ['player','enemy']) {
-    const select=byId('style-'+team);
-    const preference=observedMatch?.buildingStylePreferences?.[team];
-    select.disabled=!preference || !observerConnected || pendingBuildingStyle;
-    if (preference && !pendingBuildingStyle && select.value!==preference) select.value=preference;
-    const current=byId('style-current-'+team);
-    const theme=observedMatch?.buildingStyles?.[team];
-    const label=hasBuildingTheme(theme)?'本局 '+BUILDING_THEMES[theme].label:'';
-    if (current.textContent!==label) current.textContent=label;
-  }
-}
-
-async function chooseBuildingStyle(team,preference) {
-  if (pendingBuildingStyle) return;
-  pendingBuildingStyle=true;
-  const status=byId('style-status');
-  status.textContent='';
-  updateBuildingStyleControls();
-  try {
-    const response=await fetch('/api/match/building-style',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','X-Match-Id':observedMatch.id},
-      body:JSON.stringify({team,preference}),
-      signal:AbortSignal.timeout(9000),
-    });
-    if (response.status===409) {
-      await pollObservation();
-      return;
-    }
-    if (!response.ok) throw new Error('Building style update failed');
-    const state=await response.json();
-    if (state.id===observedMatch.id) {
-      observedMatch.buildingStyles=state.buildingStyles;
-      observedMatch.buildingStylePreferences=state.buildingStylePreferences;
-    }
-    await pollObservation();
-  } catch {
-    status.textContent='风格设置未保存，请重试。';
-  } finally {
-    pendingBuildingStyle=false;
-    updateBuildingStyleControls();
-  }
-}
-
-function updateHistoryReview() {
-  const select=byId('history-round');
-  const item=historyPage.find(round=>String(round.round)===select.value);
-  const logLink=byId('history-log');
-  byId('history-summary').textContent=item?item.review.summary:'';
-  byId('history-status').textContent=item?(item.completeLogs?'':'此局跨越升级，只保存了接入时尚留存的旧日志及之后的记录。'):
-    '已有战史会在对局结束后显示。';
-  const fill=(id,text)=>byId(id).replaceChildren(...text.map(value=>{
-    const line=document.createElement('li');
-    line.textContent=value;
-    return line;
-  }));
-  fill('history-evidence',item?.review.evidence??[]);
-  const lessons=item?.review.lessons.map(lesson=>lesson.reason)??[];
-  byId('history-lessons-title').hidden=!lessons.length;
-  fill('history-lessons',lessons);
-  logLink.hidden=!item;
-  if (item) {
-    logLink.href='/api/history/'+item.round+'/log?perspective='+game.perspective;
-    rememberHistory(item.round);
-  }
-}
-
-async function runTrainingDrills(event) {
-  event.preventDefault();
-  const button=byId('run-drill');
-  if (button.disabled) return;
-  const status=byId('drill-status'),list=byId('drill-results');
-  const select=byId('drill-select');
-  button.disabled=select.disabled=true;
-  list.replaceChildren();
-  list.hidden=true;
-  status.textContent='红蓝方正在操练。';
-  try {
-    const response=await fetch('/api/training/drills',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({drill:select.value}),signal:AbortSignal.timeout(18000),
-    });
-    if (response.status===429) {
-      status.textContent='另一组操练正在运行，请稍后重试。';
-      return;
-    }
-    if (!response.ok) throw new Error('Drills request failed');
-    const {results}=await response.json();
-    const names={scout:'改线侦察',probe:'小队试探',relief:'受袭回援',oil:'争夺油田'};
-    const detail={
-      scout:row=>'回报 '+(row.secondsToReport??'—')+' 秒，前线 '+row.frontlineOnContact+'，守军 '+row.reserveHeld,
-      probe:row=>'用时 '+row.secondsToObjective+' 秒，出动 '+row.committed+'，守军 '+row.reserveHeld,
-      relief:row=>'转入防御，回援 '+row.responders+' 个单位',
-      oil:row=>'持有 '+row.heldSeconds+' 秒，入账 '+row.income+'，投入 '+row.cost,
-    };
-    for (const row of results) {
-      const item=document.createElement('li');
-      item.textContent=factionName(row.team)+' · '+names[row.drill]+' · '+(row.passed?'达标':'待练')+' · '+detail[row.drill](row);
-      list.append(item);
-    }
-    list.hidden=false;
-    status.textContent=results.filter(row=>row.passed).length+' / '+results.length+' 次达标。';
-  } catch {
-    status.textContent='操练结果暂未返回，请重试。';
-  } finally {
-    button.disabled=select.disabled=false;
-  }
-}
-
-async function loadBattleHistory({older=false,selected=0}={}) {
-  const request=++historyRequest;
-  const team=game.perspective;
-  const before=older?historyBefore:selected?Number(selected)+1:null;
-  byId('history-status').textContent='正在加载战史…';
-  byId('history-older').disabled=true;
-  try {
-    const url='/api/history?perspective='+team+(before?'&before='+before:'');
-    const response=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(9000)});
-    if (!response.ok) throw new Error('History unavailable');
-    const page=await response.json();
-    if (request!==historyRequest || !byId('battle-history').open) return;
-    historyPage=older?[...historyPage,...page.rounds]:page.rounds;
-    historyBefore=page.before;
-    const select=byId('history-round');
-    const selectedRound=older?page.rounds[0]?.round:selected||historyPage[0]?.round;
-    const resultLabels={win:'胜',loss:'负',draw:'平',stopped:'人工结束'};
-    select.replaceChildren(...historyPage.map(round=>{
-      const option=document.createElement('option');
-      option.value=round.round;
-      option.textContent='第 '+round.round+' 局 · '+resultLabels[round.review.result]+' · '+battleClock(round.duration);
-      return option;
-    }));
-    select.disabled=!historyPage.length;
-    if (historyPage.some(round=>round.round===Number(selectedRound))) select.value=selectedRound;
-    byId('history-title').textContent=(team==='player'?'蓝方':'红方')+'战史与复盘';
-    byId('history-older').hidden=!historyBefore;
-    updateHistoryReview();
-  } catch {
-    if (request===historyRequest) byId('history-status').textContent='战史暂时无法加载。';
-  } finally {
-    if (request===historyRequest) byId('history-older').disabled=false;
-  }
-}
-
-function openBattleHistory(selected=0) {
-  const dialog=byId('battle-history');
-  if (!dialog.open) dialog.showModal();
-  rememberHistory(selected);
-  loadBattleHistory({selected});
 }
 
 function updateObserverEntities(records, registry, destination, receivedAt) {
@@ -332,7 +180,17 @@ function applyObservation(snapshot) {
     location.reload();
     return;
   }
-  if (snapshot.team !== game.perspective) return;
+  TEAM_CONFIGS.splice(0,TEAM_CONFIGS.length,...snapshot.participants);
+  TEAM_CONFIG_INDEX.clear();for(const person of TEAM_CONFIGS)TEAM_CONFIG_INDEX.set(person.id,person);
+  for(const team of Object.keys(FACTIONS))if(team!=='observer'&&!TEAM_CONFIG_INDEX.has(team))delete FACTIONS[team];
+  for(const person of TEAM_CONFIGS){if(!FACTIONS[person.id])FACTIONS[person.id]=createFaction(person.id);if(TEAM_PAINT[person.id]?.radar!==person.color)installTeamPaint(person.id);for(const key of ['power','support','factoryCount','factoryBonus'])if(person[key]!==null&&person[key]!==undefined)FACTIONS[person.id][key]=person[key];}
+  if(snapshot.team!==game.perspective) {
+    game.perspective=snapshot.team;game.selection=[];game.selectedBuilding=null;game.placement=null;game.follow=null;
+    displayedUnits.clear();displayedBuildings.clear();unitMotionSamples.clear();
+    if(snapshot.team!=='observer') {
+      const unit=snapshot.units.find(u=>u.team===snapshot.team);if(unit)centerCamera(unit);
+    }
+  }
   const outcomeChanged = game.outcome !== snapshot.outcome;
   observedMatch = snapshot;
   if (snapshot.status!=='running') game.placement=null;
@@ -340,7 +198,9 @@ function applyObservation(snapshot) {
   game.outcome = snapshot.outcome;
   game.firstEngagement = snapshot.firstEngagement;
   const faction = viewFaction();
-  if (snapshot.explored.length !== faction.explored.size ||
+  if (snapshot.globalView) {
+    if(faction.explored.size!==mapTiles.length)faction.explored=new Map(mapTiles.map(tile=>[tileKey(tile.x,tile.y),{...tile,stamp:-10}]));
+  } else if (snapshot.explored.length !== faction.explored.size ||
       snapshot.explored.some(([x,y,stamp])=>faction.explored.get(tileKey(x,y))?.stamp!==stamp)) {
     faction.explored = new Map(snapshot.explored.map(([x,y,stamp]) => [tileKey(x,y),{ x,y,stamp }]));
   }
@@ -365,11 +225,6 @@ function applyObservation(snapshot) {
   movementDust.splice(0,movementDust.length,...snapshot.dust);
   groundImpacts.splice(0,groundImpacts.length,...(snapshot.impacts??[]));
   oilRuins.splice(0,oilRuins.length,...(snapshot.oilRuins??[]));
-  for (const entry of snapshot.logs) {
-    if (entry.id <= lastLog) continue;
-    log(entry.message,entry.team,entry.time);
-    lastLog = entry.id;
-  }
   const previousSound = lastSound;
   lastSound = Math.max(lastSound ?? 0,...snapshot.sounds.map(event=>event.id));
   if (previousSound !== null && snapshot.status === 'running' && !document.hidden) {
@@ -396,82 +251,74 @@ async function pollObservation() {
     updateMatchControls();
   }
   if (id === observationRequest) {
-    const interval = document.hidden ? 800 : !observerConnected ? 1250 : observedMatch?.status === 'running' ? 180 : 600;
+    const interval=document.hidden?1200:!observerConnected?1250:observedMatch?.status==='running'?(observedMatch.globalView?350:180):800;
     observationTimer = setTimeout(pollObservation,interval);
   }
 }
 
-function setPerspectiveButtons(team) {
-  byId('view-blue').setAttribute('aria-pressed',String(team==='player'));
-  byId('view-red').setAttribute('aria-pressed',String(team==='enemy'));
-}
-
-function changeObserverPerspective(team,origin) {
-  if (team === game.perspective) return;
-  try { sessionStorage.setItem('ore-command-perspective',team); } catch {}
-  game.perspective = team;
-  setPerspectiveButtons(team);
-  selectUnit(null);
-  displayedUnits.clear();
-  displayedBuildings.clear();
-  unitMotionSamples.clear();
-  units.length = structures.length = shots.length = wrecks.length = movementDust.length = groundImpacts.length = oilRuins.length = 0;
-  byId('log').replaceChildren();
-  lastLog = 0;
-  lastSound = null;
-  centerCamera(origin);
-  pollObservation();
-}
-
-async function controlMatch(action) {
-  if (pendingControl) return;
-  pendingControl = true;
-  updateMatchControls();
+const roomErrors={game_running:'已有正在运行的游戏，请申请加入。',invalid_name:'请输入 1～24 个字符的用户名。',invalid_color:'请选择有效颜色。',invalid_theme:'请选择有效风格。',invalid_capacity:'阵营上限为 2～16，机器人数必须少于总上限。',full:'当前游戏人数已满。',name_taken:'此用户名已被当前参战玩家使用。',color_taken:'此颜色已被当前参战方使用，请选择其他颜色。',spawn_busy:'空余出生区暂时被占用，请稍后重试。',inactive:'当前没有正在运行的游戏。',forbidden:'当前身份无权执行此操作。',match_changed:'游戏已经变更，请刷新状态后重试。',archive_pending:'战报正在保存，请稍后重试。'};
+async function controlMatch(action,body=null) {
+  if(pendingControl)return false;pendingControl=true;updateMatchControls();
   try {
-    const response = await fetch('/api/match/' + action,{
-      method:'POST', headers:{'X-Match-Id':observedMatch.id},signal:AbortSignal.timeout(9000),
-    });
-    if (!response.ok) throw new Error('Match control failed');
-    const state = await response.json();
-    if (state.id !== observedMatch?.id) location.reload();
-    else await pollObservation();
-  } catch {
-    notice('战局操作暂未完成，请重试。');
-  } finally {
-    pendingControl = false;
-    updateMatchControls();
-  }
+    const response=await fetch('/api/match/'+action,{method:'POST',headers:{'X-Match-Id':observedMatch.id,...(body?{'Content-Type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(35000)});
+    const state=await response.json();
+    if(!response.ok){const message=roomErrors[state.error]??'操作未完成，请重试。';byId('room-form-error').textContent=message;notice(message);return false;}
+    if(state.id!==observedMatch.id){location.reload();return true;}
+    await pollObservation();return true;
+  }catch{byId('room-form-error').textContent='连接暂时中断，请重试。';return false;}
+  finally{pendingControl=false;updateMatchControls();}
+}
+function openRoomForm(mode) {
+  const form=byId('room-form');form.dataset.mode=mode;
+  byId('room-form-title').textContent=mode==='create'?'创建新游戏':'加入当前游戏';
+  byId('room-create-fields').hidden=mode!=='create';byId('room-create-fields').disabled=mode!=='create';byId('room-form-error').textContent='';
+  byId('room-form-submit').textContent=mode==='create'?'创建并参战':'加入战场';
+  if(!byId('room-name').value)byId('room-name').value=localStorage.getItem('cc-player-name')??'';
+  const used=new Set((observedMatch.participants??[]).filter(p=>p.status==='active'&&!p.id.startsWith('player')).map(p=>p.color));
+  const colors=['#4c91d1','#df6155','#6cbd71','#d9af4b','#ae7be5','#43bfc6','#e781b7','#dc8645','#a0b85c','#7a94e5','#c9c9c9','#a97855','#59cda5','#c47e92','#baca65','#c6a0dd'];
+  byId('room-colors').replaceChildren(...colors.map(color=>{const button=document.createElement('button');button.type='button';button.style.background=color;button.title=color;button.setAttribute('aria-label','选择阵营颜色 '+color);button.disabled=mode==='join'&&used.has(color);button.addEventListener('click',()=>byId('room-color').value=color);return button;}));
+  if(mode==='join'&&used.has(byId('room-color').value))byId('room-color').value=colors.find(c=>!used.has(c))??'#ffffff';
+  byId('room-dialog').showModal();
+}
+function attachRoomControls() {
+  const choices=[[RANDOM_BUILDING_THEME,{label:'每局随机'}],...Object.entries(BUILDING_THEMES)];
+  byId('room-theme-choices').replaceChildren(...choices.map(([id,theme])=>{
+    const button=document.createElement('button');button.type='button';button.className='theme-choice';button.dataset.theme=id;button.setAttribute('role','radio');button.setAttribute('aria-checked',String(id===byId('room-theme').value));
+    if(id===RANDOM_BUILDING_THEME){const mark=document.createElement('b');mark.textContent='?';button.append(mark);}
+    else{const image=document.createElement('img');image.src='assets/'+buildingThemeAsset(id,'yard','blue')+'.webp';image.alt='';button.append(image);}
+    const name=document.createElement('span');name.textContent=theme.label;button.append(name);
+    button.addEventListener('click',()=>{byId('room-theme').value=id;for(const sibling of button.parentElement.children)sibling.setAttribute('aria-checked',String(sibling===button));});return button;
+  }));
+  byId('start-session').addEventListener('click',()=>openRoomForm('create'));
+  byId('join-session').addEventListener('click',()=>openRoomForm('join'));
+  byId('leave-session').addEventListener('click',()=>controlMatch('leave'));
+  byId('end-session').addEventListener('click',()=>controlMatch('end'));
+  byId('room-form').addEventListener('submit',async event=>{
+    event.preventDefault();const button=byId('room-form-submit');if(button.disabled)return;button.disabled=true;
+    const body={name:byId('room-name').value,color:byId('room-color').value,theme:byId('room-theme').value,capacity:Number(byId('room-capacity').value),bots:Number(byId('room-bots').value)};
+    try{if(await controlMatch(byId('room-form').dataset.mode,body)){localStorage.setItem('cc-player-name',body.name);byId('room-dialog').close();}}
+    finally{button.disabled=false;}
+  });
+  byId('room-form-close').addEventListener('click',()=>byId('room-dialog').close());
+  byId('room-capacity').addEventListener('input',()=>{byId('room-bots').max=Number(byId('room-capacity').value)-1;if(Number(byId('room-bots').value)>Number(byId('room-bots').max))byId('room-bots').value=byId('room-bots').max;});
+  let nextActivity=0;
+  const activity=event=>{
+    if(!event.isTrusted||observedMatch?.self?.role!=='player'||Date.now()<nextActivity)return;
+    nextActivity=Date.now()+5000;void fetch('/api/session/activity',{method:'POST',headers:{'X-Match-Id':observedMatch.id}}).catch(()=>{});
+  };
+  for(const type of ['pointerdown','pointermove','keydown','wheel','touchstart'])document.addEventListener(type,activity,{passive:true});
 }
 
 function attachObserver(snapshot) {
   game.perspective = snapshot.team;
-  setPerspectiveButtons(snapshot.team);
+  if(!FACTIONS[snapshot.team])FACTIONS[snapshot.team]=createFaction(snapshot.team);
   viewFaction().explored.clear();
   viewFaction().sight.clear();
   const yard = snapshot.buildings.find(building => building.team === snapshot.team && building.type === 'yard');
   const mobile = snapshot.units.find(unit => unit.team === snapshot.team);
-  centerCamera(yard ? yardCenter(yard) : mobile ?? (snapshot.team === 'player' ? blueOrigin : redOrigin));
-  for (const team of ['player','enemy']) {
-    const select=byId('style-'+team);
-    select.add(new Option('每局随机',RANDOM_BUILDING_THEME));
-    for (const [value,theme] of Object.entries(BUILDING_THEMES)) select.add(new Option(theme.label,value));
-    select.addEventListener('change',()=>chooseBuildingStyle(team,select.value));
-  }
+  centerCamera(yard?yardCenter(yard):mobile??{x:0,y:0});
   applyObservation(snapshot);
-  byId('start-session').addEventListener('click',()=>controlMatch('start-human'));
-  byId('end-session').addEventListener('click',()=>controlMatch('end'));
-  byId('open-history').addEventListener('click',()=>openBattleHistory());
-  byId('open-drills').addEventListener('click',()=>byId('training-drills').showModal());
-  byId('drill-form').addEventListener('submit',runTrainingDrills);
-  byId('history-round').addEventListener('change',updateHistoryReview);
-  byId('history-older').addEventListener('click',()=>loadBattleHistory({older:true}));
-  byId('battle-history').addEventListener('close',()=>{
-    historyRequest++;
-    rememberHistory(null);
-  });
-  let previousHistory=null;
-  try { previousHistory=sessionStorage.getItem(historyKey); } catch {}
-  if (previousHistory!==null) openBattleHistory(Number(previousHistory));
+  attachRoomControls();
   document.addEventListener('visibilitychange',()=>{ if (!document.hidden) pollObservation(); });
   syncHud();
   pollObservation();
@@ -479,14 +326,14 @@ function attachObserver(snapshot) {
 
 async function bootObserver() {
   try {
-    globalThis.matchBootstrap = await fetchObservation(savedPerspective());
+    globalThis.matchBootstrap = await fetchObservation();
   } catch {
     document.getElementById('match-clock').textContent = '正在连接服务器';
     setTimeout(bootObserver,1500);
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=box-selection';
+  script.src = 'game.js?v=multiplayer-themes';
   document.head.append(script);
 }
 bootObserver();

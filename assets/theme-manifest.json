@@ -1,0 +1,5345 @@
+{
+  "generator": "Built-in imagegen; atlas extraction and WebP packaging",
+  "assets": [
+    {
+      "name": "europe-yard-blue.webp",
+      "style": "europe",
+      "type": "yard",
+      "facing": null,
+      "crop": [
+        33,
+        2,
+        451,
+        339
+      ],
+      "width": 440,
+      "height": 331,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-yard-red.webp",
+      "style": "europe",
+      "type": "yard",
+      "facing": null,
+      "crop": [
+        33,
+        2,
+        451,
+        339
+      ],
+      "width": 440,
+      "height": 331,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-barracks-blue.webp",
+      "style": "europe",
+      "type": "barracks",
+      "facing": null,
+      "crop": [
+        520,
+        40,
+        494,
+        301
+      ],
+      "width": 440,
+      "height": 268,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-barracks-red.webp",
+      "style": "europe",
+      "type": "barracks",
+      "facing": null,
+      "crop": [
+        520,
+        40,
+        494,
+        301
+      ],
+      "width": 440,
+      "height": 268,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-refinery-blue.webp",
+      "style": "europe",
+      "type": "refinery",
+      "facing": null,
+      "crop": [
+        1038,
+        11,
+        482,
+        330
+      ],
+      "width": 440,
+      "height": 301,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-refinery-red.webp",
+      "style": "europe",
+      "type": "refinery",
+      "facing": null,
+      "crop": [
+        1038,
+        11,
+        482,
+        330
+      ],
+      "width": 440,
+      "height": 301,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-factory-blue.webp",
+      "style": "europe",
+      "type": "factory",
+      "facing": null,
+      "crop": [
+        13,
+        341,
+        483,
+        341
+      ],
+      "width": 440,
+      "height": 311,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-factory-red.webp",
+      "style": "europe",
+      "type": "factory",
+      "facing": null,
+      "crop": [
+        13,
+        341,
+        483,
+        341
+      ],
+      "width": 440,
+      "height": 311,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-repairDepot-blue.webp",
+      "style": "europe",
+      "type": "repairDepot",
+      "facing": null,
+      "crop": [
+        517,
+        341,
+        488,
+        341
+      ],
+      "width": 440,
+      "height": 307,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-repairDepot-red.webp",
+      "style": "europe",
+      "type": "repairDepot",
+      "facing": null,
+      "crop": [
+        517,
+        341,
+        488,
+        341
+      ],
+      "width": 440,
+      "height": 307,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-airport-blue.webp",
+      "style": "europe",
+      "type": "airport",
+      "facing": null,
+      "crop": [
+        1024,
+        341,
+        504,
+        340
+      ],
+      "width": 440,
+      "height": 297,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-airport-red.webp",
+      "style": "europe",
+      "type": "airport",
+      "facing": null,
+      "crop": [
+        1024,
+        341,
+        504,
+        340
+      ],
+      "width": 440,
+      "height": 297,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-solar-blue.webp",
+      "style": "europe",
+      "type": "solar",
+      "facing": null,
+      "crop": [
+        20,
+        719,
+        492,
+        299
+      ],
+      "width": 440,
+      "height": 267,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-solar-red.webp",
+      "style": "europe",
+      "type": "solar",
+      "facing": null,
+      "crop": [
+        20,
+        719,
+        492,
+        299
+      ],
+      "width": 440,
+      "height": 267,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-diesel-blue.webp",
+      "style": "europe",
+      "type": "diesel",
+      "facing": null,
+      "crop": [
+        512,
+        682,
+        512,
+        342
+      ],
+      "width": 440,
+      "height": 294,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-diesel-red.webp",
+      "style": "europe",
+      "type": "diesel",
+      "facing": null,
+      "crop": [
+        512,
+        682,
+        512,
+        342
+      ],
+      "width": 440,
+      "height": 294,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-training-blue.webp",
+      "style": "europe",
+      "type": "training",
+      "facing": null,
+      "crop": [
+        1024,
+        721,
+        508,
+        303
+      ],
+      "width": 440,
+      "height": 262,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-training-red.webp",
+      "style": "europe",
+      "type": "training",
+      "facing": null,
+      "crop": [
+        1024,
+        721,
+        508,
+        303
+      ],
+      "width": 440,
+      "height": 262,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-oil-blue.webp",
+      "style": "europe",
+      "type": "oil",
+      "facing": null,
+      "crop": [
+        7,
+        0,
+        404,
+        430
+      ],
+      "width": 376,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-oil-red.webp",
+      "style": "europe",
+      "type": "oil",
+      "facing": null,
+      "crop": [
+        7,
+        0,
+        404,
+        430
+      ],
+      "width": 376,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-recreation-blue.webp",
+      "style": "europe",
+      "type": "recreation",
+      "facing": null,
+      "crop": [
+        457,
+        21,
+        414,
+        413
+      ],
+      "width": 401,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-recreation-red.webp",
+      "style": "europe",
+      "type": "recreation",
+      "facing": null,
+      "crop": [
+        457,
+        21,
+        414,
+        413
+      ],
+      "width": 401,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-sentry-blue.webp",
+      "style": "europe",
+      "type": "sentry",
+      "facing": null,
+      "crop": [
+        985,
+        6,
+        256,
+        437
+      ],
+      "width": 234,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-sentry-red.webp",
+      "style": "europe",
+      "type": "sentry",
+      "facing": null,
+      "crop": [
+        985,
+        6,
+        256,
+        437
+      ],
+      "width": 234,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-turret-blue.webp",
+      "style": "europe",
+      "type": "turret",
+      "facing": null,
+      "crop": [
+        1352,
+        144,
+        403,
+        267
+      ],
+      "width": 403,
+      "height": 267,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-turret-red.webp",
+      "style": "europe",
+      "type": "turret",
+      "facing": null,
+      "crop": [
+        1352,
+        144,
+        403,
+        267
+      ],
+      "width": 403,
+      "height": 267,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-bunker-blue.webp",
+      "style": "europe",
+      "type": "bunker",
+      "facing": null,
+      "crop": [
+        19,
+        512,
+        407,
+        334
+      ],
+      "width": 407,
+      "height": 334,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-bunker-red.webp",
+      "style": "europe",
+      "type": "bunker",
+      "facing": null,
+      "crop": [
+        19,
+        512,
+        407,
+        334
+      ],
+      "width": 407,
+      "height": 334,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-laser-blue.webp",
+      "style": "europe",
+      "type": "laser",
+      "facing": null,
+      "crop": [
+        505,
+        449,
+        314,
+        429
+      ],
+      "width": 293,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-laser-red.webp",
+      "style": "europe",
+      "type": "laser",
+      "facing": null,
+      "crop": [
+        505,
+        449,
+        314,
+        429
+      ],
+      "width": 293,
+      "height": 400,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-wall-x-blue.webp",
+      "style": "europe",
+      "type": "wall-x",
+      "facing": null,
+      "crop": [
+        913,
+        510,
+        369,
+        333
+      ],
+      "width": 369,
+      "height": 333,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-wall-x-red.webp",
+      "style": "europe",
+      "type": "wall-x",
+      "facing": null,
+      "crop": [
+        913,
+        510,
+        369,
+        333
+      ],
+      "width": 369,
+      "height": 333,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-wall-y-blue.webp",
+      "style": "europe",
+      "type": "wall-y",
+      "facing": null,
+      "crop": [
+        1376,
+        496,
+        367,
+        349
+      ],
+      "width": 367,
+      "height": 349,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-wall-y-red.webp",
+      "style": "europe",
+      "type": "wall-y",
+      "facing": null,
+      "crop": [
+        1376,
+        496,
+        367,
+        349
+      ],
+      "width": 367,
+      "height": 349,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-0-blue.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        73,
+        11,
+        155,
+        231
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-0-red.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        73,
+        11,
+        155,
+        231
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-0-blue.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        337,
+        11,
+        103,
+        231
+      ],
+      "width": 100,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-0-red.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        337,
+        11,
+        103,
+        231
+      ],
+      "width": 100,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-0-blue.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        576,
+        10,
+        172,
+        231
+      ],
+      "width": 167,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-0-red.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        576,
+        10,
+        172,
+        231
+      ],
+      "width": 167,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-0-blue.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        803,
+        13,
+        139,
+        229
+      ],
+      "width": 136,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-0-red.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        803,
+        13,
+        139,
+        229
+      ],
+      "width": 136,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-0-blue.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1040,
+        2,
+        221,
+        254
+      ],
+      "width": 195,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-0-red.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1040,
+        2,
+        221,
+        254
+      ],
+      "width": 195,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-0-blue.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1293,
+        44,
+        227,
+        192
+      ],
+      "width": 227,
+      "height": 192,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-0-red.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1293,
+        44,
+        227,
+        192
+      ],
+      "width": 227,
+      "height": 192,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-1-blue.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        72,
+        264,
+        147,
+        236
+      ],
+      "width": 140,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-1-red.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        72,
+        264,
+        147,
+        236
+      ],
+      "width": 140,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-1-blue.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        308,
+        263,
+        126,
+        239
+      ],
+      "width": 118,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-1-red.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        308,
+        263,
+        126,
+        239
+      ],
+      "width": 118,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-1-blue.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        568,
+        263,
+        177,
+        240
+      ],
+      "width": 165,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-1-red.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        568,
+        263,
+        177,
+        240
+      ],
+      "width": 165,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-1-blue.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        792,
+        266,
+        165,
+        234
+      ],
+      "width": 158,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-1-red.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        792,
+        266,
+        165,
+        234
+      ],
+      "width": 158,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-1-blue.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1048,
+        256,
+        199,
+        256
+      ],
+      "width": 174,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-1-red.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1048,
+        256,
+        199,
+        256
+      ],
+      "width": 174,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-1-blue.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1310,
+        314,
+        197,
+        190
+      ],
+      "width": 197,
+      "height": 190,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-1-red.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1310,
+        314,
+        197,
+        190
+      ],
+      "width": 197,
+      "height": 190,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-2-blue.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        78,
+        521,
+        134,
+        234
+      ],
+      "width": 128,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-2-red.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        78,
+        521,
+        134,
+        234
+      ],
+      "width": 128,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-2-blue.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        343,
+        521,
+        102,
+        235
+      ],
+      "width": 97,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-2-red.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        343,
+        521,
+        102,
+        235
+      ],
+      "width": 97,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-2-blue.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        579,
+        523,
+        149,
+        231
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-2-red.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        579,
+        523,
+        149,
+        231
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-2-blue.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        839,
+        522,
+        122,
+        235
+      ],
+      "width": 116,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-2-red.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        839,
+        522,
+        122,
+        235
+      ],
+      "width": 116,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-2-blue.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1061,
+        512,
+        177,
+        252
+      ],
+      "width": 157,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-2-red.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1061,
+        512,
+        177,
+        252
+      ],
+      "width": 157,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-2-blue.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1312,
+        541,
+        186,
+        223
+      ],
+      "width": 186,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-2-red.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1312,
+        541,
+        186,
+        223
+      ],
+      "width": 186,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-3-blue.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        71,
+        778,
+        116,
+        242
+      ],
+      "width": 107,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-soldier-3-red.webp",
+      "style": "qinhan",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        71,
+        778,
+        116,
+        242
+      ],
+      "width": 107,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-3-blue.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        309,
+        776,
+        132,
+        244
+      ],
+      "width": 121,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-engineer-3-red.webp",
+      "style": "qinhan",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        309,
+        776,
+        132,
+        244
+      ],
+      "width": 121,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-3-blue.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        581,
+        778,
+        133,
+        242
+      ],
+      "width": 123,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-rocketeer-3-red.webp",
+      "style": "qinhan",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        581,
+        778,
+        133,
+        242
+      ],
+      "width": 123,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-3-blue.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        797,
+        778,
+        155,
+        242
+      ],
+      "width": 143,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mortar-3-red.webp",
+      "style": "qinhan",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        797,
+        778,
+        155,
+        242
+      ],
+      "width": 143,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-3-blue.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1093,
+        768,
+        115,
+        252
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-mountedCavalry-3-red.webp",
+      "style": "qinhan",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1093,
+        768,
+        115,
+        252
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-3-blue.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1356,
+        813,
+        100,
+        207
+      ],
+      "width": 100,
+      "height": 207,
+      "cutoff": 40
+    },
+    {
+      "name": "qinhan-horse-3-red.webp",
+      "style": "qinhan",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1356,
+        813,
+        100,
+        207
+      ],
+      "width": 100,
+      "height": 207,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-0-blue.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        52,
+        6,
+        170,
+        245
+      ],
+      "width": 155,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-0-red.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        52,
+        6,
+        170,
+        245
+      ],
+      "width": 155,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-0-blue.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        305,
+        10,
+        144,
+        239
+      ],
+      "width": 135,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-0-red.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        305,
+        10,
+        144,
+        239
+      ],
+      "width": 135,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-0-blue.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        556,
+        6,
+        188,
+        245
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-0-red.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        556,
+        6,
+        188,
+        245
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-0-blue.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        808,
+        6,
+        216,
+        245
+      ],
+      "width": 197,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-0-red.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        808,
+        6,
+        216,
+        245
+      ],
+      "width": 197,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-0-blue.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        2,
+        237,
+        248
+      ],
+      "width": 214,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-0-red.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        2,
+        237,
+        248
+      ],
+      "width": 214,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-0-blue.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1284,
+        54,
+        249,
+        195
+      ],
+      "width": 249,
+      "height": 195,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-0-red.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1284,
+        54,
+        249,
+        195
+      ],
+      "width": 249,
+      "height": 195,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-1-blue.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        63,
+        262,
+        143,
+        245
+      ],
+      "width": 131,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-1-red.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        63,
+        262,
+        143,
+        245
+      ],
+      "width": 131,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-1-blue.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        315,
+        263,
+        122,
+        244
+      ],
+      "width": 112,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-1-red.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        315,
+        263,
+        122,
+        244
+      ],
+      "width": 112,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-1-blue.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        561,
+        263,
+        179,
+        245
+      ],
+      "width": 164,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-1-red.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        561,
+        263,
+        179,
+        245
+      ],
+      "width": 164,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-1-blue.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        802,
+        263,
+        158,
+        245
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-1-red.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        802,
+        263,
+        158,
+        245
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-1-blue.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1045,
+        256,
+        202,
+        256
+      ],
+      "width": 177,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-1-red.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1045,
+        256,
+        202,
+        256
+      ],
+      "width": 177,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-1-blue.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1307,
+        321,
+        199,
+        191
+      ],
+      "width": 199,
+      "height": 191,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-1-red.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1307,
+        321,
+        199,
+        191
+      ],
+      "width": 199,
+      "height": 191,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-2-blue.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        66,
+        513,
+        147,
+        247
+      ],
+      "width": 133,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-2-red.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        66,
+        513,
+        147,
+        247
+      ],
+      "width": 133,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-2-blue.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        321,
+        520,
+        120,
+        240
+      ],
+      "width": 112,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-2-red.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        321,
+        520,
+        120,
+        240
+      ],
+      "width": 112,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-2-blue.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        573,
+        513,
+        156,
+        248
+      ],
+      "width": 141,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-2-red.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        573,
+        513,
+        156,
+        248
+      ],
+      "width": 141,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-2-blue.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        818,
+        512,
+        130,
+        249
+      ],
+      "width": 117,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-2-red.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        818,
+        512,
+        130,
+        249
+      ],
+      "width": 117,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-2-blue.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1053,
+        512,
+        185,
+        252
+      ],
+      "width": 164,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-2-red.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1053,
+        512,
+        185,
+        252
+      ],
+      "width": 164,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-2-blue.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1304,
+        534,
+        211,
+        228
+      ],
+      "width": 207,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-2-red.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1304,
+        534,
+        211,
+        228
+      ],
+      "width": 207,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-3-blue.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        70,
+        775,
+        115,
+        245
+      ],
+      "width": 105,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-soldier-3-red.webp",
+      "style": "tang",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        70,
+        775,
+        115,
+        245
+      ],
+      "width": 105,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-3-blue.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        308,
+        778,
+        130,
+        242
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-engineer-3-red.webp",
+      "style": "tang",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        308,
+        778,
+        130,
+        242
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-3-blue.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        567,
+        775,
+        143,
+        245
+      ],
+      "width": 131,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-rocketeer-3-red.webp",
+      "style": "tang",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        567,
+        775,
+        143,
+        245
+      ],
+      "width": 131,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-3-blue.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        796,
+        775,
+        155,
+        245
+      ],
+      "width": 142,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mortar-3-red.webp",
+      "style": "tang",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        796,
+        775,
+        155,
+        245
+      ],
+      "width": 142,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-3-blue.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1093,
+        768,
+        116,
+        253
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-mountedCavalry-3-red.webp",
+      "style": "tang",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1093,
+        768,
+        116,
+        253
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-3-blue.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1354,
+        808,
+        109,
+        213
+      ],
+      "width": 109,
+      "height": 213,
+      "cutoff": 40
+    },
+    {
+      "name": "tang-horse-3-red.webp",
+      "style": "tang",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1354,
+        808,
+        109,
+        213
+      ],
+      "width": 109,
+      "height": 213,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-0-blue.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        62,
+        14,
+        182,
+        235
+      ],
+      "width": 173,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-0-red.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        62,
+        14,
+        182,
+        235
+      ],
+      "width": 173,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-0-blue.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        316,
+        14,
+        133,
+        235
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-0-red.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        316,
+        14,
+        133,
+        235
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-0-blue.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        563,
+        14,
+        183,
+        235
+      ],
+      "width": 174,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-0-red.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        563,
+        14,
+        183,
+        235
+      ],
+      "width": 174,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-0-blue.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        809,
+        14,
+        153,
+        235
+      ],
+      "width": 146,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-0-red.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        809,
+        14,
+        153,
+        235
+      ],
+      "width": 146,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-0-blue.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        5,
+        236,
+        240
+      ],
+      "width": 220,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-0-red.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        5,
+        236,
+        240
+      ],
+      "width": 220,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-0-blue.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1290,
+        40,
+        243,
+        205
+      ],
+      "width": 243,
+      "height": 205,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-0-red.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1290,
+        40,
+        243,
+        205
+      ],
+      "width": 243,
+      "height": 205,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-1-blue.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        57,
+        269,
+        178,
+        237
+      ],
+      "width": 168,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-1-red.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        57,
+        269,
+        178,
+        237
+      ],
+      "width": 168,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-1-blue.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        295,
+        270,
+        141,
+        236
+      ],
+      "width": 134,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-1-red.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        295,
+        270,
+        141,
+        236
+      ],
+      "width": 134,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-1-blue.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        554,
+        270,
+        176,
+        236
+      ],
+      "width": 167,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-1-red.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        554,
+        270,
+        176,
+        236
+      ],
+      "width": 167,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-1-blue.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        800,
+        270,
+        148,
+        236
+      ],
+      "width": 140,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-1-red.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        800,
+        270,
+        148,
+        236
+      ],
+      "width": 140,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-1-blue.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1053,
+        258,
+        173,
+        248
+      ],
+      "width": 156,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-1-red.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1053,
+        258,
+        173,
+        248
+      ],
+      "width": 156,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-1-blue.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1318,
+        302,
+        181,
+        196
+      ],
+      "width": 181,
+      "height": 196,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-1-red.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1318,
+        302,
+        181,
+        196
+      ],
+      "width": 181,
+      "height": 196,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-2-blue.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        63,
+        529,
+        155,
+        232
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-2-red.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        63,
+        529,
+        155,
+        232
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-2-blue.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        329,
+        523,
+        111,
+        237
+      ],
+      "width": 105,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-2-red.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        329,
+        523,
+        111,
+        237
+      ],
+      "width": 105,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-2-blue.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        565,
+        526,
+        156,
+        235
+      ],
+      "width": 149,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-2-red.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        565,
+        526,
+        156,
+        235
+      ],
+      "width": 149,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-2-blue.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        812,
+        527,
+        132,
+        234
+      ],
+      "width": 126,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-2-red.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        812,
+        527,
+        132,
+        234
+      ],
+      "width": 126,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-2-blue.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1050,
+        516,
+        179,
+        247
+      ],
+      "width": 162,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-2-red.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1050,
+        516,
+        179,
+        247
+      ],
+      "width": 162,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-2-blue.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1316,
+        529,
+        187,
+        233
+      ],
+      "width": 180,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-2-red.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1316,
+        529,
+        187,
+        233
+      ],
+      "width": 180,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-3-blue.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        64,
+        781,
+        139,
+        241
+      ],
+      "width": 129,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-soldier-3-red.webp",
+      "style": "qing",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        64,
+        781,
+        139,
+        241
+      ],
+      "width": 129,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-3-blue.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        314,
+        781,
+        127,
+        241
+      ],
+      "width": 118,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-engineer-3-red.webp",
+      "style": "qing",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        314,
+        781,
+        127,
+        241
+      ],
+      "width": 118,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-3-blue.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        559,
+        781,
+        146,
+        241
+      ],
+      "width": 136,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-rocketeer-3-red.webp",
+      "style": "qing",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        559,
+        781,
+        146,
+        241
+      ],
+      "width": 136,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-3-blue.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        807,
+        782,
+        118,
+        240
+      ],
+      "width": 110,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mortar-3-red.webp",
+      "style": "qing",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        807,
+        782,
+        118,
+        240
+      ],
+      "width": 110,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-3-blue.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1083,
+        773,
+        112,
+        246
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-mountedCavalry-3-red.webp",
+      "style": "qing",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1083,
+        773,
+        112,
+        246
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-3-blue.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1354,
+        808,
+        103,
+        213
+      ],
+      "width": 103,
+      "height": 213,
+      "cutoff": 40
+    },
+    {
+      "name": "qing-horse-3-red.webp",
+      "style": "qing",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1354,
+        808,
+        103,
+        213
+      ],
+      "width": 103,
+      "height": 213,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-0-blue.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        53,
+        5,
+        172,
+        238
+      ],
+      "width": 162,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-0-red.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        53,
+        5,
+        172,
+        238
+      ],
+      "width": 162,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-0-blue.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        309,
+        4,
+        141,
+        239
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-0-red.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        309,
+        4,
+        141,
+        239
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-0-blue.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        552,
+        10,
+        167,
+        234
+      ],
+      "width": 160,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-0-red.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        552,
+        10,
+        167,
+        234
+      ],
+      "width": 160,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-0-blue.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        801,
+        14,
+        223,
+        229
+      ],
+      "width": 218,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-0-red.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        801,
+        14,
+        223,
+        229
+      ],
+      "width": 218,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-0-blue.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        4,
+        213,
+        236
+      ],
+      "width": 202,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-0-red.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1024,
+        4,
+        213,
+        236
+      ],
+      "width": 202,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-0-blue.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1280,
+        35,
+        234,
+        202
+      ],
+      "width": 234,
+      "height": 202,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-0-red.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1280,
+        35,
+        234,
+        202
+      ],
+      "width": 234,
+      "height": 202,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-1-blue.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        71,
+        264,
+        135,
+        239
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-1-red.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        71,
+        264,
+        135,
+        239
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-1-blue.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        301,
+        260,
+        131,
+        244
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-1-red.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        301,
+        260,
+        131,
+        244
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-1-blue.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        556,
+        264,
+        131,
+        241
+      ],
+      "width": 122,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-1-red.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        556,
+        264,
+        131,
+        241
+      ],
+      "width": 122,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-1-blue.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        805,
+        263,
+        112,
+        243
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-1-red.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        805,
+        263,
+        112,
+        243
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-1-blue.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1038,
+        256,
+        176,
+        254
+      ],
+      "width": 155,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-1-red.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1038,
+        256,
+        176,
+        254
+      ],
+      "width": 155,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-1-blue.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1306,
+        292,
+        173,
+        218
+      ],
+      "width": 173,
+      "height": 218,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-1-red.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1306,
+        292,
+        173,
+        218
+      ],
+      "width": 173,
+      "height": 218,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-2-blue.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        68,
+        523,
+        122,
+        237
+      ],
+      "width": 115,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-2-red.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        68,
+        523,
+        122,
+        237
+      ],
+      "width": 115,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-2-blue.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        326,
+        517,
+        112,
+        243
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-2-red.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        326,
+        517,
+        112,
+        243
+      ],
+      "width": 103,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-2-blue.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        571,
+        522,
+        135,
+        238
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-2-red.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        571,
+        522,
+        135,
+        238
+      ],
+      "width": 127,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-2-blue.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        803,
+        527,
+        119,
+        232
+      ],
+      "width": 115,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-2-red.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        803,
+        527,
+        119,
+        232
+      ],
+      "width": 115,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-2-blue.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1038,
+        515,
+        163,
+        252
+      ],
+      "width": 145,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-2-red.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1038,
+        515,
+        163,
+        252
+      ],
+      "width": 145,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-2-blue.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1297,
+        534,
+        177,
+        230
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-2-red.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1297,
+        534,
+        177,
+        230
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-3-blue.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        70,
+        781,
+        111,
+        235
+      ],
+      "width": 106,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-soldier-3-red.webp",
+      "style": "europe",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        70,
+        781,
+        111,
+        235
+      ],
+      "width": 106,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-3-blue.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        308,
+        781,
+        128,
+        239
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-engineer-3-red.webp",
+      "style": "europe",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        308,
+        781,
+        128,
+        239
+      ],
+      "width": 120,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-3-blue.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        559,
+        774,
+        111,
+        245
+      ],
+      "width": 101,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-rocketeer-3-red.webp",
+      "style": "europe",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        559,
+        774,
+        111,
+        245
+      ],
+      "width": 101,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-3-blue.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        808,
+        776,
+        113,
+        243
+      ],
+      "width": 104,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mortar-3-red.webp",
+      "style": "europe",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        808,
+        776,
+        113,
+        243
+      ],
+      "width": 104,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-3-blue.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1067,
+        773,
+        116,
+        249
+      ],
+      "width": 104,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-mountedCavalry-3-red.webp",
+      "style": "europe",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1067,
+        773,
+        116,
+        249
+      ],
+      "width": 104,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-3-blue.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1337,
+        806,
+        106,
+        214
+      ],
+      "width": 106,
+      "height": 214,
+      "cutoff": 40
+    },
+    {
+      "name": "europe-horse-3-red.webp",
+      "style": "europe",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1337,
+        806,
+        106,
+        214
+      ],
+      "width": 106,
+      "height": 214,
+      "cutoff": 40
+    },
+    {
+      "name": "space-yard-blue.webp",
+      "style": "space",
+      "type": "yard",
+      "facing": null,
+      "crop": [
+        8,
+        21,
+        401,
+        368
+      ],
+      "width": 401,
+      "height": 368,
+      "cutoff": 40
+    },
+    {
+      "name": "space-yard-red.webp",
+      "style": "space",
+      "type": "yard",
+      "facing": null,
+      "crop": [
+        8,
+        21,
+        401,
+        368
+      ],
+      "width": 401,
+      "height": 368,
+      "cutoff": 40
+    },
+    {
+      "name": "space-barracks-blue.webp",
+      "style": "space",
+      "type": "barracks",
+      "facing": null,
+      "crop": [
+        421,
+        51,
+        407,
+        341
+      ],
+      "width": 407,
+      "height": 341,
+      "cutoff": 40
+    },
+    {
+      "name": "space-barracks-red.webp",
+      "style": "space",
+      "type": "barracks",
+      "facing": null,
+      "crop": [
+        421,
+        51,
+        407,
+        341
+      ],
+      "width": 407,
+      "height": 341,
+      "cutoff": 40
+    },
+    {
+      "name": "space-refinery-blue.webp",
+      "style": "space",
+      "type": "refinery",
+      "facing": null,
+      "crop": [
+        842,
+        50,
+        415,
+        347
+      ],
+      "width": 415,
+      "height": 347,
+      "cutoff": 40
+    },
+    {
+      "name": "space-refinery-red.webp",
+      "style": "space",
+      "type": "refinery",
+      "facing": null,
+      "crop": [
+        842,
+        50,
+        415,
+        347
+      ],
+      "width": 415,
+      "height": 347,
+      "cutoff": 40
+    },
+    {
+      "name": "space-factory-blue.webp",
+      "style": "space",
+      "type": "factory",
+      "facing": null,
+      "crop": [
+        8,
+        434,
+        409,
+        396
+      ],
+      "width": 409,
+      "height": 396,
+      "cutoff": 40
+    },
+    {
+      "name": "space-factory-red.webp",
+      "style": "space",
+      "type": "factory",
+      "facing": null,
+      "crop": [
+        8,
+        434,
+        409,
+        396
+      ],
+      "width": 409,
+      "height": 396,
+      "cutoff": 40
+    },
+    {
+      "name": "space-repairDepot-blue.webp",
+      "style": "space",
+      "type": "repairDepot",
+      "facing": null,
+      "crop": [
+        421,
+        431,
+        414,
+        351
+      ],
+      "width": 414,
+      "height": 351,
+      "cutoff": 40
+    },
+    {
+      "name": "space-repairDepot-red.webp",
+      "style": "space",
+      "type": "repairDepot",
+      "facing": null,
+      "crop": [
+        421,
+        431,
+        414,
+        351
+      ],
+      "width": 414,
+      "height": 351,
+      "cutoff": 40
+    },
+    {
+      "name": "space-airport-blue.webp",
+      "style": "space",
+      "type": "airport",
+      "facing": null,
+      "crop": [
+        842,
+        435,
+        420,
+        395
+      ],
+      "width": 420,
+      "height": 395,
+      "cutoff": 40
+    },
+    {
+      "name": "space-airport-red.webp",
+      "style": "space",
+      "type": "airport",
+      "facing": null,
+      "crop": [
+        842,
+        435,
+        420,
+        395
+      ],
+      "width": 420,
+      "height": 395,
+      "cutoff": 40
+    },
+    {
+      "name": "space-solar-blue.webp",
+      "style": "space",
+      "type": "solar",
+      "facing": null,
+      "crop": [
+        3,
+        830,
+        413,
+        343
+      ],
+      "width": 413,
+      "height": 343,
+      "cutoff": 40
+    },
+    {
+      "name": "space-solar-red.webp",
+      "style": "space",
+      "type": "solar",
+      "facing": null,
+      "crop": [
+        3,
+        830,
+        413,
+        343
+      ],
+      "width": 413,
+      "height": 343,
+      "cutoff": 40
+    },
+    {
+      "name": "space-diesel-blue.webp",
+      "style": "space",
+      "type": "diesel",
+      "facing": null,
+      "crop": [
+        421,
+        840,
+        415,
+        355
+      ],
+      "width": 415,
+      "height": 355,
+      "cutoff": 40
+    },
+    {
+      "name": "space-diesel-red.webp",
+      "style": "space",
+      "type": "diesel",
+      "facing": null,
+      "crop": [
+        421,
+        840,
+        415,
+        355
+      ],
+      "width": 415,
+      "height": 355,
+      "cutoff": 40
+    },
+    {
+      "name": "space-training-blue.webp",
+      "style": "space",
+      "type": "training",
+      "facing": null,
+      "crop": [
+        842,
+        830,
+        421,
+        377
+      ],
+      "width": 421,
+      "height": 377,
+      "cutoff": 40
+    },
+    {
+      "name": "space-training-red.webp",
+      "style": "space",
+      "type": "training",
+      "facing": null,
+      "crop": [
+        842,
+        830,
+        421,
+        377
+      ],
+      "width": 421,
+      "height": 377,
+      "cutoff": 40
+    },
+    {
+      "name": "space-oil-blue.webp",
+      "style": "space",
+      "type": "oil",
+      "facing": null,
+      "crop": [
+        3,
+        8,
+        440,
+        394
+      ],
+      "width": 440,
+      "height": 394,
+      "cutoff": 172
+    },
+    {
+      "name": "space-oil-red.webp",
+      "style": "space",
+      "type": "oil",
+      "facing": null,
+      "crop": [
+        3,
+        8,
+        440,
+        394
+      ],
+      "width": 440,
+      "height": 394,
+      "cutoff": 172
+    },
+    {
+      "name": "space-recreation-blue.webp",
+      "style": "space",
+      "type": "recreation",
+      "facing": null,
+      "crop": [
+        451,
+        32,
+        436,
+        371
+      ],
+      "width": 436,
+      "height": 371,
+      "cutoff": 178
+    },
+    {
+      "name": "space-recreation-red.webp",
+      "style": "space",
+      "type": "recreation",
+      "facing": null,
+      "crop": [
+        451,
+        32,
+        436,
+        371
+      ],
+      "width": 436,
+      "height": 371,
+      "cutoff": 178
+    },
+    {
+      "name": "space-sentry-blue.webp",
+      "style": "space",
+      "type": "sentry",
+      "facing": null,
+      "crop": [
+        887,
+        11,
+        342,
+        414
+      ],
+      "width": 330,
+      "height": 400,
+      "cutoff": 176
+    },
+    {
+      "name": "space-sentry-red.webp",
+      "style": "space",
+      "type": "sentry",
+      "facing": null,
+      "crop": [
+        887,
+        11,
+        342,
+        414
+      ],
+      "width": 330,
+      "height": 400,
+      "cutoff": 176
+    },
+    {
+      "name": "space-turret-blue.webp",
+      "style": "space",
+      "type": "turret",
+      "facing": null,
+      "crop": [
+        1347,
+        106,
+        427,
+        298
+      ],
+      "width": 427,
+      "height": 298,
+      "cutoff": 166
+    },
+    {
+      "name": "space-turret-red.webp",
+      "style": "space",
+      "type": "turret",
+      "facing": null,
+      "crop": [
+        1347,
+        106,
+        427,
+        298
+      ],
+      "width": 427,
+      "height": 298,
+      "cutoff": 166
+    },
+    {
+      "name": "space-bunker-blue.webp",
+      "style": "space",
+      "type": "bunker",
+      "facing": null,
+      "crop": [
+        11,
+        545,
+        429,
+        317
+      ],
+      "width": 429,
+      "height": 317,
+      "cutoff": 172
+    },
+    {
+      "name": "space-bunker-red.webp",
+      "style": "space",
+      "type": "bunker",
+      "facing": null,
+      "crop": [
+        11,
+        545,
+        429,
+        317
+      ],
+      "width": 429,
+      "height": 317,
+      "cutoff": 172
+    },
+    {
+      "name": "space-laser-blue.webp",
+      "style": "space",
+      "type": "laser",
+      "facing": null,
+      "crop": [
+        502,
+        445,
+        324,
+        432
+      ],
+      "width": 300,
+      "height": 400,
+      "cutoff": 178
+    },
+    {
+      "name": "space-laser-red.webp",
+      "style": "space",
+      "type": "laser",
+      "facing": null,
+      "crop": [
+        502,
+        445,
+        324,
+        432
+      ],
+      "width": 300,
+      "height": 400,
+      "cutoff": 178
+    },
+    {
+      "name": "space-wall-x-blue.webp",
+      "style": "space",
+      "type": "wall-x",
+      "facing": null,
+      "crop": [
+        910,
+        502,
+        390,
+        323
+      ],
+      "width": 390,
+      "height": 323,
+      "cutoff": 181
+    },
+    {
+      "name": "space-wall-x-red.webp",
+      "style": "space",
+      "type": "wall-x",
+      "facing": null,
+      "crop": [
+        910,
+        502,
+        390,
+        323
+      ],
+      "width": 390,
+      "height": 323,
+      "cutoff": 181
+    },
+    {
+      "name": "space-wall-y-blue.webp",
+      "style": "space",
+      "type": "wall-y",
+      "facing": null,
+      "crop": [
+        1398,
+        492,
+        356,
+        350
+      ],
+      "width": 356,
+      "height": 350,
+      "cutoff": 167
+    },
+    {
+      "name": "space-wall-y-red.webp",
+      "style": "space",
+      "type": "wall-y",
+      "facing": null,
+      "crop": [
+        1398,
+        492,
+        356,
+        350
+      ],
+      "width": 356,
+      "height": 350,
+      "cutoff": 167
+    },
+    {
+      "name": "space-soldier-0-blue.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        75,
+        15,
+        154,
+        223
+      ],
+      "width": 154,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-0-red.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 0,
+      "crop": [
+        75,
+        15,
+        154,
+        223
+      ],
+      "width": 154,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-0-blue.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        321,
+        9,
+        146,
+        227
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-0-red.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 0,
+      "crop": [
+        321,
+        9,
+        146,
+        227
+      ],
+      "width": 144,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-0-blue.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        551,
+        11,
+        179,
+        226
+      ],
+      "width": 177,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-0-red.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 0,
+      "crop": [
+        551,
+        11,
+        179,
+        226
+      ],
+      "width": 177,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-0-blue.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        227,
+        17,
+        272,
+        486
+      ],
+      "width": 125,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-0-red.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 0,
+      "crop": [
+        227,
+        17,
+        272,
+        486
+      ],
+      "width": 125,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-0-blue.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1037,
+        6,
+        229,
+        224
+      ],
+      "width": 229,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-0-red.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 0,
+      "crop": [
+        1037,
+        6,
+        229,
+        224
+      ],
+      "width": 229,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-0-blue.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1300,
+        40,
+        222,
+        191
+      ],
+      "width": 222,
+      "height": 191,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-0-red.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 0,
+      "crop": [
+        1300,
+        40,
+        222,
+        191
+      ],
+      "width": 222,
+      "height": 191,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-1-blue.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        87,
+        268,
+        131,
+        223
+      ],
+      "width": 131,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-1-red.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 1,
+      "crop": [
+        87,
+        268,
+        131,
+        223
+      ],
+      "width": 131,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-1-blue.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        317,
+        257,
+        143,
+        242
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-1-red.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 1,
+      "crop": [
+        317,
+        257,
+        143,
+        242
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-1-blue.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        560,
+        261,
+        155,
+        236
+      ],
+      "width": 147,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-1-red.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 1,
+      "crop": [
+        560,
+        261,
+        155,
+        236
+      ],
+      "width": 147,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-1-blue.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        239,
+        557,
+        241,
+        463
+      ],
+      "width": 117,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-1-red.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 1,
+      "crop": [
+        239,
+        557,
+        241,
+        463
+      ],
+      "width": 117,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-1-blue.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1051,
+        256,
+        187,
+        244
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-1-red.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 1,
+      "crop": [
+        1051,
+        256,
+        187,
+        244
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-1-blue.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1310,
+        272,
+        188,
+        223
+      ],
+      "width": 188,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-1-red.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 1,
+      "crop": [
+        1310,
+        272,
+        188,
+        223
+      ],
+      "width": 188,
+      "height": 223,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-2-blue.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        87,
+        531,
+        127,
+        219
+      ],
+      "width": 127,
+      "height": 219,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-2-red.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 2,
+      "crop": [
+        87,
+        531,
+        127,
+        219
+      ],
+      "width": 127,
+      "height": 219,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-2-blue.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        332,
+        519,
+        137,
+        224
+      ],
+      "width": 137,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-2-red.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 2,
+      "crop": [
+        332,
+        519,
+        137,
+        224
+      ],
+      "width": 137,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-2-blue.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        563,
+        531,
+        149,
+        222
+      ],
+      "width": 149,
+      "height": 222,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-2-red.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 2,
+      "crop": [
+        563,
+        531,
+        149,
+        222
+      ],
+      "width": 149,
+      "height": 222,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-2-blue.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        237,
+        1087,
+        228,
+        542
+      ],
+      "width": 94,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-2-red.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 2,
+      "crop": [
+        237,
+        1087,
+        228,
+        542
+      ],
+      "width": 94,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-2-blue.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1060,
+        516,
+        183,
+        238
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-2-red.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 2,
+      "crop": [
+        1060,
+        516,
+        183,
+        238
+      ],
+      "width": 172,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-2-blue.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1317,
+        536,
+        196,
+        219
+      ],
+      "width": 196,
+      "height": 219,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-2-red.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 2,
+      "crop": [
+        1317,
+        536,
+        196,
+        219
+      ],
+      "width": 196,
+      "height": 219,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-3-blue.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        88,
+        775,
+        105,
+        237
+      ],
+      "width": 99,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-soldier-3-red.webp",
+      "style": "space",
+      "type": "soldier",
+      "facing": 3,
+      "crop": [
+        88,
+        775,
+        105,
+        237
+      ],
+      "width": 99,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-3-blue.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        320,
+        775,
+        137,
+        238
+      ],
+      "width": 129,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-engineer-3-red.webp",
+      "style": "space",
+      "type": "engineer",
+      "facing": 3,
+      "crop": [
+        320,
+        775,
+        137,
+        238
+      ],
+      "width": 129,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-3-blue.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        574,
+        769,
+        120,
+        245
+      ],
+      "width": 110,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-rocketeer-3-red.webp",
+      "style": "space",
+      "type": "rocketeer",
+      "facing": 3,
+      "crop": [
+        574,
+        769,
+        120,
+        245
+      ],
+      "width": 110,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-3-blue.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        249,
+        1629,
+        214,
+        483
+      ],
+      "width": 99,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mortar-3-red.webp",
+      "style": "space",
+      "type": "mortar",
+      "facing": 3,
+      "crop": [
+        249,
+        1629,
+        214,
+        483
+      ],
+      "width": 99,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-3-blue.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1099,
+        768,
+        113,
+        251
+      ],
+      "width": 101,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mountedCavalry-3-red.webp",
+      "style": "space",
+      "type": "mountedCavalry",
+      "facing": 3,
+      "crop": [
+        1099,
+        768,
+        113,
+        251
+      ],
+      "width": 101,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-3-blue.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1352,
+        787,
+        106,
+        232
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-horse-3-red.webp",
+      "style": "space",
+      "type": "horse",
+      "facing": 3,
+      "crop": [
+        1352,
+        787,
+        106,
+        232
+      ],
+      "width": 102,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-0-blue.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 0,
+      "crop": [
+        8,
+        61,
+        296,
+        191
+      ],
+      "width": 256,
+      "height": 165,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-0-red.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 0,
+      "crop": [
+        8,
+        61,
+        296,
+        191
+      ],
+      "width": 256,
+      "height": 165,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-0-blue.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 0,
+      "crop": [
+        319,
+        100,
+        312,
+        150
+      ],
+      "width": 256,
+      "height": 123,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-0-red.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 0,
+      "crop": [
+        319,
+        100,
+        312,
+        150
+      ],
+      "width": 256,
+      "height": 123,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-0-blue.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 0,
+      "crop": [
+        631,
+        72,
+        305,
+        178
+      ],
+      "width": 256,
+      "height": 149,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-0-red.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 0,
+      "crop": [
+        631,
+        72,
+        305,
+        178
+      ],
+      "width": 256,
+      "height": 149,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-0-blue.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 0,
+      "crop": [
+        951,
+        50,
+        311,
+        200
+      ],
+      "width": 256,
+      "height": 165,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-0-red.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 0,
+      "crop": [
+        951,
+        50,
+        311,
+        200
+      ],
+      "width": 256,
+      "height": 165,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-1-blue.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 1,
+      "crop": [
+        15,
+        319,
+        290,
+        250
+      ],
+      "width": 256,
+      "height": 221,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-1-red.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 1,
+      "crop": [
+        15,
+        319,
+        290,
+        250
+      ],
+      "width": 256,
+      "height": 221,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-1-blue.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 1,
+      "crop": [
+        326,
+        344,
+        305,
+        234
+      ],
+      "width": 256,
+      "height": 196,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-1-red.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 1,
+      "crop": [
+        326,
+        344,
+        305,
+        234
+      ],
+      "width": 256,
+      "height": 196,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-1-blue.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 1,
+      "crop": [
+        631,
+        337,
+        291,
+        232
+      ],
+      "width": 256,
+      "height": 204,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-1-red.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 1,
+      "crop": [
+        631,
+        337,
+        291,
+        232
+      ],
+      "width": 256,
+      "height": 204,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-1-blue.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 1,
+      "crop": [
+        956,
+        326,
+        288,
+        243
+      ],
+      "width": 256,
+      "height": 216,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-1-red.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 1,
+      "crop": [
+        956,
+        326,
+        288,
+        243
+      ],
+      "width": 256,
+      "height": 216,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-2-blue.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 2,
+      "crop": [
+        20,
+        625,
+        287,
+        236
+      ],
+      "width": 256,
+      "height": 211,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-2-red.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 2,
+      "crop": [
+        20,
+        625,
+        287,
+        236
+      ],
+      "width": 256,
+      "height": 211,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-2-blue.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 2,
+      "crop": [
+        330,
+        668,
+        290,
+        189
+      ],
+      "width": 256,
+      "height": 167,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-2-red.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 2,
+      "crop": [
+        330,
+        668,
+        290,
+        189
+      ],
+      "width": 256,
+      "height": 167,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-2-blue.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 2,
+      "crop": [
+        636,
+        640,
+        284,
+        211
+      ],
+      "width": 256,
+      "height": 190,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-2-red.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 2,
+      "crop": [
+        636,
+        640,
+        284,
+        211
+      ],
+      "width": 256,
+      "height": 190,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-2-blue.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 2,
+      "crop": [
+        954,
+        589,
+        280,
+        274
+      ],
+      "width": 229,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-2-red.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 2,
+      "crop": [
+        954,
+        589,
+        280,
+        274
+      ],
+      "width": 229,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-3-blue.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 3,
+      "crop": [
+        64,
+        897,
+        202,
+        306
+      ],
+      "width": 148,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-mcv-3-red.webp",
+      "style": "space",
+      "type": "mcv",
+      "facing": 3,
+      "crop": [
+        64,
+        897,
+        202,
+        306
+      ],
+      "width": 148,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-3-blue.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 3,
+      "crop": [
+        370,
+        923,
+        195,
+        291
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-miner-3-red.webp",
+      "style": "space",
+      "type": "miner",
+      "facing": 3,
+      "crop": [
+        370,
+        923,
+        195,
+        291
+      ],
+      "width": 150,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-3-blue.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 3,
+      "crop": [
+        665,
+        901,
+        220,
+        296
+      ],
+      "width": 166,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-3-red.webp",
+      "style": "space",
+      "type": "tank",
+      "facing": 3,
+      "crop": [
+        665,
+        901,
+        220,
+        296
+      ],
+      "width": 166,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-3-blue.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 3,
+      "crop": [
+        987,
+        886,
+        223,
+        311
+      ],
+      "width": 161,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-artillery-3-red.webp",
+      "style": "space",
+      "type": "artillery",
+      "facing": 3,
+      "crop": [
+        987,
+        886,
+        223,
+        311
+      ],
+      "width": 161,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-0-blue.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 0,
+      "crop": [
+        34,
+        97,
+        456,
+        188
+      ],
+      "width": 256,
+      "height": 106,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-0-red.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 0,
+      "crop": [
+        34,
+        97,
+        456,
+        188
+      ],
+      "width": 256,
+      "height": 106,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-0-blue.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 0,
+      "crop": [
+        588,
+        63,
+        465,
+        183
+      ],
+      "width": 256,
+      "height": 101,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-0-red.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 0,
+      "crop": [
+        588,
+        63,
+        465,
+        183
+      ],
+      "width": 256,
+      "height": 101,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-1-blue.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 1,
+      "crop": [
+        49,
+        367,
+        438,
+        261
+      ],
+      "width": 256,
+      "height": 153,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-1-red.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 1,
+      "crop": [
+        49,
+        367,
+        438,
+        261
+      ],
+      "width": 256,
+      "height": 153,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-1-blue.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 1,
+      "crop": [
+        619,
+        365,
+        389,
+        234
+      ],
+      "width": 256,
+      "height": 154,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-1-red.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 1,
+      "crop": [
+        619,
+        365,
+        389,
+        234
+      ],
+      "width": 256,
+      "height": 154,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-2-blue.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 2,
+      "crop": [
+        55,
+        692,
+        438,
+        260
+      ],
+      "width": 256,
+      "height": 152,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-2-red.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 2,
+      "crop": [
+        55,
+        692,
+        438,
+        260
+      ],
+      "width": 256,
+      "height": 152,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-2-blue.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 2,
+      "crop": [
+        614,
+        676,
+        412,
+        217
+      ],
+      "width": 256,
+      "height": 135,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-2-red.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 2,
+      "crop": [
+        614,
+        676,
+        412,
+        217
+      ],
+      "width": 256,
+      "height": 135,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-3-blue.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 3,
+      "crop": [
+        127,
+        1024,
+        298,
+        339
+      ],
+      "width": 197,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-hull-3-red.webp",
+      "style": "space",
+      "type": "tank-hull",
+      "facing": 3,
+      "crop": [
+        127,
+        1024,
+        298,
+        339
+      ],
+      "width": 197,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-3-blue.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 3,
+      "crop": [
+        689,
+        997,
+        229,
+        389
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    },
+    {
+      "name": "space-tank-turret-3-red.webp",
+      "style": "space",
+      "type": "tank-turret",
+      "facing": 3,
+      "crop": [
+        689,
+        997,
+        229,
+        389
+      ],
+      "width": 132,
+      "height": 224,
+      "cutoff": 40
+    }
+  ]
+}

@@ -20,10 +20,17 @@ const sources = ['commander.js', 'building-themes.js', 'game.js'].map(name =>
 const interfaceScript = new vm.Script(`({
   game, FACTIONS, units, structures, deposits, oreReserves, recoveringOre, searchSites, battlefield, OIL_FIELD,
   shots, wrecks, movementDust, groundImpacts, stepSimulation, canSeeEntity, knowsBuilding, oreCapacity, amountAt, tileUnder, finalizeOilOperations,
-  executePlayerOrder,
+  executePlayerOrder, addParticipant, withdrawParticipant, mapTiles,
+  spawnSite(slots) {
+    return slots.map(slot=>({slot,...battlefield.origins[slot]})).filter(point=>
+      [...units,...structures.filter(b=>b.team!=='neutral')].every(entity=>distanceTo(point,entity.width?yardCenter(entity):entity)>12) &&
+      walkable(point.x,point.y-1)).sort((a,b)=>{
+        const score=p=>Math.min(999,...units.filter(u=>u.health>0).map(u=>distanceTo(p,u)));return score(b)-score(a);
+      })[0]??null;
+  },
   nextId() { return nextUnitId; },
   restore(saved) {
-    for (const name of ['player','enemy']) {
+    for (const name of Object.keys(saved.factions)) {
       const faction=FACTIONS[name]=saved.factions[name];
       const {commander}=faction;
       delete faction.research;
@@ -98,11 +105,15 @@ let roundArchived = false;
 let archiveRetryAt = 0;
 let startPending = false;
 const heardAt = new Map();
-const factions = ['player','enemy'];
+const sessions=new Map();
+const idleTimeoutMs=workerData.idleTimeoutMs??600000;
+const palette=['#4c91d1','#df6155','#6cbd71','#d9af4b','#ae7be5','#43bfc6','#e781b7','#dc8645','#a0b85c','#7a94e5','#c9c9c9','#a97855','#59cda5','#c47e92','#baca65','#c6a0dd'];
+let nextSessionCheck=0;
+let participantIndex=new Map(),activeRoster=new Map();
 const availableThemes = Object.keys(BUILDING_THEMES);
 
 function stylePreferences(saved) {
-  return Object.fromEntries(factions.map(team=>{
+  return Object.fromEntries((match?.participants?.map(p=>p.id)??['player','enemy']).map(team=>{
     const preference=saved?.[team];
     return [team,validBuildingThemePreference(preference)?preference:RANDOM_BUILDING_THEME];
   }));
@@ -119,6 +130,8 @@ function addLog(message, team, time, plan, metrics) {
 
 function initialise(description, saved = null) {
   match = description;
+  participantIndex=new Map(match.participants.map(p=>[p.id,p]));
+  activeRoster=new Map(match.participants.filter(p=>p.status==='active').map(p=>[p.id,p]));
   logs = saved?.logs ?? [];
   events = [];
   nextEvent = saved?.nextEvent ?? 1;
@@ -138,7 +151,8 @@ function initialise(description, saved = null) {
     matchEngine: {
       seed: match.seed,
       get buildingStyles() { return match.buildingStyles; },
-      get humanControlled() { return match.mode === 'human'; },
+      managed:true,capacity:match.capacity??2,teams:match.participants,
+      get humanTeams() { return activeParticipants().filter(p=>!p.bot).map(p=>p.id); },
       planner: Boolean(plannerOrigin),
       log:addLog,
       sound(cue, point, source) {
@@ -164,23 +178,19 @@ function initialise(description, saved = null) {
   if (saved) engine.restore(saved);
 }
 
-function freshMatch(status, round, previousSeed = null, previousPreferences) {
-  const chosen=randomInt(previousSeed===null?0x100000000:0xffffffff);
-  const seed=previousSeed!==null && chosen>=previousSeed?chosen+1:chosen;
-  const buildingStylePreferences=stylePreferences(previousPreferences);
-  const buildingStyles=Object.fromEntries(factions.map(team=>{
-    const preference=buildingStylePreferences[team];
-    return [team,preference===RANDOM_BUILDING_THEME?availableThemes[randomInt(availableThemes.length)]:preference];
-  }));
-  return { id:randomUUID(), seed, status, round, mode:'human', auto:false, buildingStyles, buildingStylePreferences,
-    startedAt:status==='running'?Date.now():null, finishedAt:null, nextRoundAt:null };
+function freshMatch(status,round,capacity=8,participants=[]) {
+  let seed=randomInt(0x100000000);while(seed===match?.seed)seed=randomInt(0x100000000);
+  const buildingStylePreferences=Object.fromEntries(participants.map(p=>[p.id,p.theme??RANDOM_BUILDING_THEME]));
+  const buildingStyles=Object.fromEntries(participants.map(p=>[p.id,p.theme&&p.theme!==RANDOM_BUILDING_THEME?resolveBuildingTheme(p.theme):availableThemes[randomInt(availableThemes.length)]]));
+  return {id:randomUUID(),seed,status,round,mode:'multiplayer',auto:false,capacity,participants,initialBots:participants.filter(p=>p.bot).length,competitionStarted:participants.length>=2,
+    buildingStyles,buildingStylePreferences,startedAt:status==='running'?Date.now():null,finishedAt:null,nextRoundAt:null};
 }
 
 function save() {
   const { game, FACTIONS, units, structures, searchSites, deposits, oreReserves, recoveringOre, groundImpacts } = engine;
-  const offsets = history.append(match.id,journal.offsets,journal.pending);
+  const offsets = history.append(match.id,journal.offsets,journal.pending,match.participants.map(p=>p.id));
   const state = {
-    version, match, logs, nextEvent, nextBuilding, units, structures, searchSites, deposits, oreReserves, recoveringOre,
+    version, match, sessions:[...sessions], logs, nextEvent, nextBuilding, units, structures, searchSites, deposits, oreReserves, recoveringOre,
     factions: FACTIONS,
     groundImpacts,
     nextUnitId: engine.nextId(),
@@ -209,7 +219,7 @@ function archiveRound() {
   engine.finalizeOilOperations();
   if (!saveSafely()) return false;
   try {
-    const survivors = Object.fromEntries(['player','enemy'].map(team=>[team,{
+    const survivors = Object.fromEntries(match.participants.map(p=>p.id).map(team=>[team,{
       units:engine.units.reduce((total,unit)=>total+(unit.team===team && unit.health>0 ?
         1+(unit.passengers?.length??0) : 0),0),
       buildings:engine.structures.filter(building=>building.team===team && building.health>0).length,
@@ -222,20 +232,121 @@ function archiveRound() {
   return roundArchived;
 }
 
-function startRound() {
-  if (['finished','ended'].includes(match.status) && !archiveRound()) return;
-  const experience=history.experience();
+function visitor(token) {
+  if (!sessions.has(token)) sessions.set(token,{role:'observer',team:null,matchId:null,lastSeen:Date.now(),lastActivity:Date.now()});
+  const session=sessions.get(token);session.lastSeen=Date.now();return session;
+}
+function activeParticipants() {return [...activeRoster.values()];}
+function memberFor(session) {if(session.matchId!==match.id)return null;const p=activeRoster.get(session.team);return p?.owner===session.token?p:null;}
+function permissions(session) {
+  const humans=activeParticipants().filter(p=>!p.bot).length;
+  return {canCreate:match.status!=='running',canJoin:match.status==='running' && session.role!=='player' && (activeParticipants().length<match.capacity || match.participants.some(p=>p.legacy && !p.owner && p.status==='active')),
+    canEnd:match.status==='running' && ((session.role==='player' && memberFor(session) && humans===1) || (session.role==='observer' && humans===0))};
+}
+function publicParticipant(p,global=false,team=null) {
+  const own=p.id===team;
+  return {...pick(p,['id','name','color','bot','status','slot','joinedAt','leftAt','reason']),
+    slot:global||own?p.slot:null,theme:match.buildingStyles[p.id],
+    units:global||own?engine.units.filter(u=>u.team===p.id&&u.health>0).reduce((sum,u)=>sum+1+(u.passengers?.filter(p=>p.health>0).length??0),0):null,
+    buildings:global||own?engine.structures.filter(b=>b.team===p.id && b.health>0).length:null,
+    credits:global||own?engine.FACTIONS[p.id]?.credits??null:null,
+    ...Object.fromEntries(['power','support','factoryCount','factoryBonus'].map(key=>[key,global||own?engine.FACTIONS[p.id]?.[key]??null:null]))};
+}
+function sessionInfo(session) {
+  const active=memberFor(session);
+  return {role:active?'player':'observer',team:active?.id??null,name:active?.name??session.name??'观察者',
+    result:session.lastResult?.matchId===match.id?session.lastResult:null,
+    idleRemaining:active?Math.max(0,idleTimeoutMs-(Date.now()-session.lastActivity)):null,...permissions(session)};
+}
+function profile(body) {
+  const name=typeof body?.name==='string'?body.name.trim():'';
+  const color=typeof body?.color==='string'?body.color.toLowerCase():'';
+  if(!name || [...name].length>24 || /[\x00-\x1f\x7f]/.test(name))return {error:'invalid_name'};
+  if(!/^#[0-9a-f]{6}$/.test(color))return {error:'invalid_color'};
+  const theme=body.theme??RANDOM_BUILDING_THEME;
+  if(!validBuildingThemePreference(theme))return {error:'invalid_theme'};
+  return {name,color,theme};
+}
+function createGame(session,body) {
+  if(match.status==='running')return {error:'game_running'};
+  const person=profile(body);if(person.error)return person;
+  const capacity=body.capacity,bots=body.bots;
+  if(!Number.isInteger(capacity)||capacity<2||capacity>16||!Number.isInteger(bots)||bots<0||bots>=capacity)return {error:'invalid_capacity'};
+  if(['finished','ended'].includes(match.status)&&!archiveRound())return {error:'archive_pending'};
+  const people=[{id:'f1',...person,bot:false,status:'active',slot:0,joinedAt:Date.now(),owner:session.token}];
+  const colors=palette.filter(c=>c!==person.color);
+  for(let i=0;i<bots;i++)people.push({id:'f'+(i+2),name:'机器人 '+(i+1)+(person.name==='机器人 '+(i+1)?'（自动）':''),color:colors[i],bot:true,status:'active',slot:i+1,joinedAt:Date.now()});
   const round=match.round+Number(match.status!=='idle');
-  initialise(freshMatch('running',round,match.seed,match.buildingStylePreferences));
-  addLog('第 '+round+' 局开始。玩家指挥蓝方，红方由指挥智能体控制。',null,0);
-  const review=experience.enemy;
-  review.focus=review.focus.filter(task=>task!=='research');
-  engine.FACTIONS.enemy.experience=review;
-  if (review.sample) {
-    addLog('红方复习最近 '+review.sample+' 局（'+review.wins+' 胜 '+review.losses+' 负 '+review.draws+' 平）。本局重点：'+
-      review.focus.map(task=>labels[task]).join('、')+'。','enemy',0);
+  for(const v of sessions.values()){v.role='observer';v.team=null;v.lastResult=null;}
+  initialise(freshMatch('running',round,capacity,people));
+  Object.assign(session,{role:'player',team:'f1',name:person.name,matchId:match.id,lastActivity:Date.now()});
+  const experience=history.experience().enemy;
+  for(const p of people.filter(p=>p.bot))engine.FACTIONS[p.id].experience=experience;
+  addLog('第 '+round+' 局开始，最多 '+capacity+' 方，初始机器人 '+bots+' 方。',null,0);
+  startPending=!saveSafely();return roomInfo(session);
+}
+function joinGame(session,body) {
+  if(match.status!=='running')return {error:'inactive'};
+  if(memberFor(session))return roomInfo(session);
+  const person=profile(body);if(person.error)return person;
+  const active=activeParticipants(),legacy=active.find(p=>p.legacy&&!p.owner&&!p.bot);
+  if(active.some(p=>p.name===person.name && p!==legacy))return {error:'name_taken'};
+  if(active.some(p=>p.color===person.color && p!==legacy))return {error:'color_taken'};
+  if(!legacy&&active.length>=match.capacity)return {error:'full'};
+  let participant;
+  if(legacy) {
+    participant=legacy;Object.assign(participant,person,{owner:session.token,legacy:false});
+    match.buildingStylePreferences[participant.id]=person.theme;match.buildingStyles[participant.id]=person.theme===RANDOM_BUILDING_THEME?resolveBuildingTheme(match.buildingStyles[participant.id]):person.theme;
+  } else {
+    const slots=Array.from({length:match.capacity},(_,i)=>i).filter(slot=>!active.some(p=>p.slot===slot));
+    const site=engine.spawnSite(slots);if(!site)return {error:'spawn_busy'};
+    participant={id:'f'+(match.participants.length+1),...person,bot:false,status:'active',slot:site.slot,joinedAt:Date.now(),owner:session.token};
+    match.participants.push(participant);participantIndex.set(participant.id,participant);activeRoster.set(participant.id,participant);
+    match.buildingStylePreferences[participant.id]=person.theme;
+    match.buildingStyles[participant.id]=person.theme===RANDOM_BUILDING_THEME?availableThemes[randomInt(availableThemes.length)]:person.theme;
+    engine.addParticipant(participant,site);
   }
-  startPending=!saveSafely();
+  Object.assign(session,{role:'player',team:participant.id,name:person.name,matchId:match.id,lastActivity:Date.now(),lastResult:null});
+  match.competitionStarted ||= activeParticipants().length>=2;
+  addLog(person.name+' 加入战场。',null,engine.game.time);saveSafely();return roomInfo(session);
+}
+function eliminate(participant,reason,explode=false) {
+  if(participant.status!=='active')return;
+  if(explode)engine.withdrawParticipant(participant.id);
+  else delete engine.FACTIONS[participant.id];
+  activeRoster.delete(participant.id);
+  participant.status=reason==='defeated'?'eliminated':'left';participant.reason=reason;participant.leftAt=Date.now();
+  const session=sessions.get(participant.owner);
+  if(session){session.lastResult={matchId:match.id,team:participant.id,kind:reason};session.role='observer';session.team=null;}
+  addLog(participant.name+(reason==='idle'?' 长时间未操作，已被移出战场。':reason==='left'?' 离开战场，所属单位已解体。':' 已被淘汰。'),null,engine.game.time);
+}
+function reconcile() {
+  if(match.status!=='running')return;
+  const aliveTeams=new Set([...engine.units,...engine.structures].filter(e=>e.health>0).map(e=>e.team));
+  for(const p of activeParticipants())if(!aliveTeams.has(p.id))eliminate(p,'defeated');
+  const alive=activeParticipants();
+  if(match.competitionStarted && alive.length<=1) {
+    engine.game.outcome=alive[0]?.id??'draw';match.status='finished';match.finishedAt=Date.now();
+    addLog(alive[0]?alive[0].name+' 获胜，本局结束。':'所有阵营同时退出，本局平局。',null,engine.game.time);archiveRound();
+  }
+}
+function checkSessions() {
+  const now=Date.now();if(now<nextSessionCheck)return;nextSessionCheck=now+1000;
+  if(match.status==='running')for(const p of activeParticipants().filter(p=>!p.bot)) {
+    const session=sessions.get(p.owner);
+    if(session?now-session.lastActivity>=idleTimeoutMs:now>=(p.graceUntil??Infinity))eliminate(p,'idle',true);
+  }
+  reconcile();
+}
+function roomInfo(session) {
+  const global=match.status!=='running'||sessionInfo(session).role==='observer';
+  const people=activeParticipants(),last=participantIndex.get(session.lastResult?.matchId===match.id?session.lastResult.team:null);
+  if(last&&!people.includes(last))people.push(last);
+  return {...matchInfo(false),self:sessionInfo(session),participants:people.map(p=>publicParticipant(p,global,session.team)),
+    buildingStyles:Object.fromEntries(people.map(p=>[p.id,match.buildingStyles[p.id]])),buildingStylePreferences:Object.fromEntries(people.map(p=>[p.id,match.buildingStylePreferences[p.id]])),
+    stats:{current:activeParticipants().length,humans:activeParticipants().filter(p=>!p.bot).length,bots:activeParticipants().filter(p=>p.bot).length,
+      cumulative:match.participants.length,cumulativeHumans:match.participants.length-match.initialBots,cumulativeBots:match.initialBots,
+      observers:[...sessions.values()].filter(s=>s.role==='observer' && Date.now()-s.lastSeen<30000).length}};
 }
 
 function entityId(entity) {
@@ -254,25 +365,27 @@ const unitKeys = ['id','team','type','label','x','y','heading','speed','health',
 const buildingKeys = ['team','type','x','y','width','height','remaining','health','axis','nextPayout'];
 const planKeys = ['task','kind','homeReserve'];
 
-function matchInfo() {
-  return { ...match, time: engine.game.time, outcome: engine.game.outcome, firstEngagement: engine.game.firstEngagement };
+function matchInfo(includeParticipants=true) {
+  const {participants,...info}=match;
+  return {...info,participants:includeParticipants?participants.map(p=>publicParticipant(p)):undefined,durationSeconds:match.startedAt?Math.max(0,((match.finishedAt??Date.now())-match.startedAt)/1000):0,
+    time:engine.game.time,outcome:engine.game.outcome,firstEngagement:engine.game.firstEngagement};
 }
 
-function observation(team) {
-  if (match.mode==='human' && match.status==='running') team='player';
-  const view = engine.FACTIONS[team];
-  const seenUnits = engine.units.filter(unit => unit.health > 0 && engine.canSeeEntity(view, unit));
-  const seenBuildings = engine.structures.filter(building => building.health > 0 && engine.canSeeEntity(view, building));
+function observation(session) {
+  const team=match.status==='running'?(memberFor(session)?.id??'observer'):'observer',global=team==='observer';
+  const view=engine.FACTIONS[team]??{team,commander:{},explored:new Map(),sight:new Set(),scentTargets:new Set(),orders:{},credits:0,power:{supply:0,demand:0,rate:1},support:{fireRate:1,damage:1}};
+  const seenUnits = engine.units.filter(unit => unit.health > 0 && (global || engine.canSeeEntity(view, unit)));
+  const seenBuildings = engine.structures.filter(building => building.health > 0 && (global || engine.canSeeEntity(view, building)));
   const {width:oilWidth,height:oilHeight}=engine.OIL_FIELD;
-  const oilRuins=engine.battlefield.oils.filter(({x,y})=>engine.knowsBuilding(view,{x,y,width:oilWidth,height:oilHeight}) &&
+  const oilRuins=engine.battlefield.oils.filter(({x,y})=>(global || engine.knowsBuilding(view,{x,y,width:oilWidth,height:oilHeight})) &&
     !engine.structures.some(building=>building.type==='oil' && building.health>0 && building.x===x && building.y===y))
     .map(({x,y})=>({x,y}));
   const visible = new Set([...seenUnits, ...seenBuildings]);
   const visibleId = entity => visible.has(entity) ? entityId(entity) : null;
   const explored = [];
   const ore = [];
-  for (const { x, y, stamp } of view.explored.values()) {
-    explored.push([x,y,stamp]);
+  for (const {x,y,stamp=0} of (global?engine.mapTiles:view.explored.values())) {
+    if(!global)explored.push([x,y,stamp]);
     if (engine.oreCapacity(x,y)) ore.push([x,y,engine.amountAt(x,y)]);
   }
   const plan = view.commander.plan;
@@ -284,34 +397,33 @@ function observation(team) {
     plan: plan ? { ...pick(plan, planKeys), followup: plan.followup ? pick(plan.followup, planKeys) : null } : null,
   };
   return {
-    ...matchInfo(), team, explored, ore, oilRuins, strategy, sight: [...view.sight],
+    ...roomInfo(session),team,globalView:global,explored,ore,oilRuins,strategy,sight:[...view.sight],
     scents: [...view.scentTargets].map(visibleId).filter(Boolean),
     units: seenUnits.map(unit => ({
       ...pick(unit, unitKeys), viewId: entityId(unit),
-      goal: unit.goal && (unit.team === team || !['bomber','reconPlane','helicopter'].includes(unit.type))
+      goal: unit.goal && (global || unit.team === team || !['bomber','reconPlane','helicopter'].includes(unit.type))
         ? pick(unit.goal, ['x','y','kind']) : null,
-      route: unit.team === team ? unit.route : [],
-      marchLeader: unit.team===team && unit.marchGroup?.leader===unit,
-      marchSize: unit.team===team ? unit.marchGroup?.members.length??null : null,
-      passengerCount: unit.team === team && unit.passengers ? unit.passengers.length : null,
-      serviceActive: unit.team === team && Boolean(unit.serviceDepot),
+      route: global || unit.team === team ? unit.route : [],
+      marchLeader: (global||unit.team===team) && unit.marchGroup?.leader===unit,
+      marchSize: global||unit.team===team ? unit.marchGroup?.members.length??null : null,
+      passengerCount: (global||unit.team === team) && unit.passengers ? unit.passengers.length : null,
+      serviceActive: (global||unit.team === team) && Boolean(unit.serviceDepot),
       attackId: visibleId(unit.attackTarget), captureId: visibleId(unit.captureTarget), scentId: visibleId(unit.scentTarget),
     })),
     buildings: seenBuildings.map(building => ({
       ...pick(building, buildingKeys), viewId: entityId(building),
-      queue: building.team === team ? building.queue : [],
-      rally: building.team === team ? building.rally : null,
-      repair: building.team === team ? building.repair : null,
-      serviceStatus: building.team === team && building.type === 'repairDepot' && building.serviceTank?.health>0
+      queue: global || building.team === team ? building.queue : [],
+      rally: global || building.team === team ? building.rally : null,
+      repair: global || building.team === team ? building.repair : null,
+      serviceStatus: (global||building.team === team) && building.type === 'repairDepot' && building.serviceTank?.health>0
         ? building.serviceTank.mode==='garage-repair'?'坦克维修中':'正在接收或放行坦克' : null,
     })),
-    logs: logs.filter(entry => !entry.team || entry.team === team).slice(-64),
-    sounds: events.filter(event => event.audience.includes(team) && event.time + 1 > engine.game.time)
+    sounds: events.filter(event => (global || event.audience.includes(team)) && event.time + 1 > engine.game.time)
       .map(({ audience, ...event }) => event),
-    shots: engine.shots.filter(shot => shot.witnesses.includes(team)),
-    wrecks: engine.wrecks.filter(wreck => wreck.witnesses.includes(team)),
-    dust: engine.movementDust.filter(dust => view.explored.has(engine.tileUnder(dust.x,dust.y))),
-    impacts: engine.groundImpacts.filter(mark=>mark.witnesses.includes(team))
+    shots: engine.shots.filter(shot => (global || shot.witnesses.includes(team))),
+    wrecks: engine.wrecks.filter(wreck => (global || wreck.witnesses.includes(team))),
+    dust: engine.movementDust.filter(dust => global || view.explored.has(engine.tileUnder(dust.x,dust.y))),
+    impacts: engine.groundImpacts.filter(mark=>global || mark.witnesses.includes(team))
       .map(({x,y,radius,time})=>({x,y,radius,time})),
   };
 }
@@ -324,11 +436,13 @@ function tick() {
     if (clock-checkpointAt>1000) startPending=!saveSafely();
     return;
   }
+  checkSessions();
   if (match.status !== 'running') {
     if (['finished','ended'].includes(match.status) && !roundArchived && clock>=archiveRetryAt) {
       archiveRetryAt=clock+1000;
       archiveRound();
     }
+    if(clock-checkpointAt>4500)saveSafely();
     return;
   }
   pending += elapsed;
@@ -336,89 +450,65 @@ function tick() {
     engine.stepSimulation(step);
     pending -= step;
   }
-  if (engine.game.outcome) {
-    match.status = 'finished';
-    match.finishedAt=Date.now();
-    const result={player:'蓝方获胜。',enemy:'红方获胜。',draw:'双方战成平局。'};
-    addLog(result[engine.game.outcome],null,engine.game.time);
-    archiveRound();
-  } else if (clock - checkpointAt > 4500) {
-    saveSafely();
-  }
+  reconcile();
+  if(clock-checkpointAt>4500)saveSafely();
 }
 
 function command(request) {
-  if (['start-human','end'].includes(request.action) && request.current && request.current !== match.id) return matchInfo();
-  switch (request.action) {
-    case 'status': return matchInfo();
-    case 'snapshot': return observation(request.team);
-    case 'building-style': {
-      if (request.current!==match.id) return null;
-      const {team,preference}=request;
-      if (!factions.includes(team) || !validBuildingThemePreference(preference)) throw new Error('Invalid building style');
-      if (match.buildingStylePreferences[team]===preference) return matchInfo();
-      const previous=match;
-      match={...match, buildingStylePreferences:{...match.buildingStylePreferences,[team]:preference}};
-      if (preference!==RANDOM_BUILDING_THEME) match.buildingStyles={...match.buildingStyles,[team]:preference};
-      if (!saveSafely()) {
-        match=previous;
-        throw new Error('Building style checkpoint failed');
-      }
-      return matchInfo();
+  if(request.action==='shutdown'){clearInterval(timer);saveSafely();return matchInfo();}
+  const session=visitor(request.session??'internal-observer');session.token=request.session??'internal-observer';
+  checkSessions();
+  if(['create','join','leave','end','order','building-style','activity'].includes(request.action) && request.current!==match.id)return {error:'match_changed'};
+  switch(request.action) {
+    case 'status':return roomInfo(session);
+    case 'snapshot':return observation(session);
+    case 'activity':session.lastActivity=Date.now();return {ok:true};
+    case 'create':return createGame(session,request.body);
+    case 'join':return joinGame(session,request.body);
+    case 'leave':{if(match.status!=='running'){session.role='observer';session.team=null;return roomInfo(session);}const p=memberFor(session);if(p)eliminate(p,'left',true);reconcile();saveSafely();return roomInfo(session);}
+    case 'end':{
+      if(!permissions(session).canEnd)return {error:'forbidden'};
+      match.status='ended';match.finishedAt=Date.now();engine.game.outcome=null;
+      addLog((session.name??'观察者')+' 手动结束本局，未分胜负。',null,engine.game.time);archiveRound();return roomInfo(session);
     }
-    case 'history': return history.list(request.team,request.before);
-    case 'historyLog': {
-      const round=history.get(request.round);
-      return round?history.logFile(round.id,request.team):null;
+    case 'order':{
+      const p=memberFor(session);
+      if(!p || match.status!=='running'||startPending)return {error:'forbidden'};
+      session.lastActivity=Date.now();
+      const resolve=id=>typeof id!=='string'?null:id.startsWith('u')?engine.units.find(u=>'u'+u.id===id):id.startsWith('b')?engine.structures.find(b=>b.viewId===id):null;
+      const result=engine.executePlayerOrder(request.order,resolve,p.id);reconcile();return result;
     }
-    case 'order': {
-      if (request.current!==match.id || match.mode!=='human' || match.status!=='running' || startPending) {
-        return {error:'inactive'};
-      }
-      const resolve=id=>{
-        if (typeof id!=='string') return null;
-        if (id.startsWith('u')) return engine.units.find(unit=>'u'+unit.id===id);
-        if (id.startsWith('b')) return engine.structures.find(building=>building.viewId===id);
-        return null;
-      };
-      return engine.executePlayerOrder(request.order,resolve);
+    case 'building-style':{
+      const p=memberFor(session);if(!p || request.team!==p.id)return {error:'forbidden'};
+      if(!validBuildingThemePreference(request.preference))return {error:'invalid_building_style'};
+      session.lastActivity=Date.now();match.buildingStylePreferences[p.id]=request.preference;
+      if(request.preference!==RANDOM_BUILDING_THEME)match.buildingStyles[p.id]=request.preference;
+      saveSafely();return roomInfo(session);
     }
-    case 'start-human':
-      if (match.status !== 'running') startRound();
-      return matchInfo();
-    case 'end':
-      match.auto=false;
-      match.nextRoundAt=null;
-      if (match.status === 'running') {
-        match.status = 'ended';
-        match.finishedAt=Date.now();
-        addLog(match.mode==='human'?'玩家结束了本局。':'对局由观战者结束。',null,engine.game.time);
-        archiveRound();
-      } else saveSafely();
-      return matchInfo();
-    case 'shutdown':
-      clearInterval(timer);
-      saveSafely();
-      return matchInfo();
-    default: throw new Error('Unknown match action');
+    case 'history':return history.list(request.team??'observer',request.before);
+    case 'historyLog':{const round=history.get(request.round);if(!round)return null;const team=round.reviews[request.team]?request.team:Object.keys(round.reviews)[0];return history.logFile(round.id,team);}
+    default:throw Error('Unknown match action');
   }
 }
 
 try {
   const saved = v8.deserialize(fs.readFileSync(checkpointFile));
   if (saved.version !== version) throw new Error('Unsupported checkpoint version');
-  const match=saved.match;
-  match.mode??='ai';
-  match.round??=history.latestRound()+1;
-  match.auto=false;
-  match.startedAt??=null;
-  match.finishedAt??=null;
-  match.nextRoundAt=null;
-  match.buildingStyles=Object.fromEntries(factions.map(team=>[team,resolveBuildingTheme(match.buildingStyles?.[team])]));
-  match.buildingStylePreferences=stylePreferences(match.buildingStylePreferences);
-  initialise(match, saved);
+  const description=saved.match;
+  description.round??=history.latestRound()+1;description.auto=false;description.nextRoundAt=null;
+  if(!description.participants) {
+    description.capacity=2;description.mode='multiplayer';description.competitionStarted=true;
+    description.participants=['player','enemy'].map((id,index)=>({id,name:index?'红方机器人':'原蓝方玩家',color:palette[index],bot:index===1,
+      status:[...saved.units,...saved.structures].some(e=>e.team===id&&e.health>0)?'active':'eliminated',slot:index,legacy:index===0,owner:null,graceUntil:Date.now()+idleTimeoutMs,joinedAt:description.startedAt??Date.now()}));
+  }
+  description.initialBots??=description.participants.filter(p=>p.bot).length;
+  description.buildingStyles=Object.fromEntries(description.participants.map(p=>[p.id,resolveBuildingTheme(description.buildingStyles?.[p.id])]));
+  description.buildingStylePreferences=Object.fromEntries(description.participants.map(p=>[p.id,validBuildingThemePreference(description.buildingStylePreferences?.[p.id])?description.buildingStylePreferences[p.id]:'classic']));
+  for(const [token,session]of saved.sessions??[])sessions.set(token,session);
+  initialise(description,saved);
+
 } catch (error) {
-  if (error.code !== 'ENOENT') console.error('Cannot restore match:', error.message);
+  if(error.code!=='ENOENT')throw error;
   initialise(freshMatch('idle',history.latestRound()+1));
 }
 

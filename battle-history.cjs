@@ -19,7 +19,7 @@ function replaceFile(file, contents) {
 function review(match, team, logs, remaining) {
   const result = match.status === 'ended' ? 'stopped' : match.outcome === 'draw' ? 'draw' :
     match.outcome === team ? 'win' : 'loss';
-  const name = team === 'player' ? '蓝方' : '红方';
+  const name=match.participants?.find(p=>p.id===team)?.name??(team==='player'?'蓝方':'红方');
   let oil = 0, yardLosses = 0, firstPowerDrop = null, events = 0;
   const plans = new Map();
   const oilOperations = {};
@@ -110,25 +110,25 @@ class BattleHistory {
   }
 
   logFile(id, team) {
-    if (!teams.includes(team)) throw new Error('Invalid perspective');
+    safeId(team);
     return path.join(this.root, safeId(id), team+'.jsonl');
   }
 
-  append(id, offsets, entries) {
+  append(id, offsets, entries, audience=teams) {
     fs.mkdirSync(path.join(this.root, safeId(id)), { recursive:true, mode:0o700 });
     const next = {};
-    for (const team of teams) {
+    for (const team of audience) {
       const file = this.logFile(id,team);
       const handle = fs.openSync(file,'a+',0o600);
       try {
         const size = fs.fstatSync(handle).size;
-        if (size < offsets[team]) throw new Error('Battle log is shorter than its checkpoint');
+        if (size < (offsets[team]??0)) throw new Error('Battle log is shorter than its checkpoint');
         // Discard writes made before a process exited without committing its checkpoint.
-        if (size > offsets[team]) fs.ftruncateSync(handle, offsets[team]);
+        if (size > (offsets[team]??0)) fs.ftruncateSync(handle,offsets[team]??0);
         const lines = entries.filter(entry=>!entry.team || entry.team===team)
           .map(entry=>JSON.stringify(entry)+'\n').join('');
         if (lines) fs.writeFileSync(handle, lines);
-        next[team] = offsets[team] + Buffer.byteLength(lines);
+        next[team] = (offsets[team]??0) + Buffer.byteLength(lines);
       } finally { fs.closeSync(handle); }
     }
     return next;
@@ -153,10 +153,11 @@ class BattleHistory {
       if (existing.id!==match.id) throw new Error('Round already belongs to another match');
       return existing;
     }
-    const reviews = Object.fromEntries(teams.map(team=>[team,review(match,team,
+    const reviewTeams=match.participants?.map(p=>p.id)??teams;
+    const reviews = Object.fromEntries(reviewTeams.map(team=>[team,review(match,team,
       fs.readFileSync(this.logFile(match.id,team),'utf8'),survivors[team])]));
     const result = { id:match.id, round:match.round, startedAt:match.startedAt, finishedAt:match.finishedAt,
-      status:match.status, outcome:match.outcome, duration:match.time, completeLogs, reviews };
+      status:match.status,outcome:match.outcome,duration:match.time,participants:match.participants,completeLogs,reviews };
     replaceFile(this.manifestFile(match.round),JSON.stringify(result));
     return result;
   }
@@ -170,7 +171,8 @@ class BattleHistory {
     const rounds = this.records().map(file=>Number(file.slice(6,-5))).filter(round=>!before || round<before);
     const page = rounds.slice(0,24).map(round=>{
       const { reviews, ...info } = this.get(round);
-      return { ...info, review:reviews[team] };
+      const winner=info.participants?.find(p=>p.id===info.outcome)?.name;
+      return {...info,review:reviews[team]??{result:info.status==='ended'?'stopped':info.outcome==='draw'?'draw':'win',summary:info.status==='ended'?'人工结束，未分胜负。':winner?winner+' 获胜。':'本局已结束。',evidence:[],lessons:[],events:0},logTeam:reviews[team]?team:Object.keys(reviews)[0]};
     });
     return { rounds:page, before:rounds.length>page.length ? page.at(-1).round : null };
   }
@@ -183,7 +185,7 @@ class BattleHistory {
       if (recent.length===8) break;
     }
     return Object.fromEntries(teams.map(team=>{
-      const reviews = recent.map(round=>round.reviews[team]);
+      const reviews=recent.map(round=>round.reviews[team]??round.reviews[round.participants?.find(p=>p.bot===(team==='enemy'))?.id]).filter(Boolean);
       const weights = {};
       const oilObservations = {};
       for (const [i, result] of reviews.entries()) {

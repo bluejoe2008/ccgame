@@ -50,7 +50,18 @@ const REFINERY_PAD = {x:-.85,y:-1.40,width:3.92,height:3.70};
 const OIL_FIELD = {label:'油田',width:2,height:2,roof:82,body:66,health:350,color:'#d4aa72',powerUse:12};
 const MAP_SEED=globalThis.matchEngine?.seed??globalThis.matchBootstrap?.seed??
   crypto.getRandomValues(new Uint32Array(1))[0];
-const BOARD={left:-51*U,right:51*U,top:-47*V,bottom:47*V};
+const MATCH_CAPACITY=globalThis.matchEngine?.capacity??globalThis.matchBootstrap?.capacity??2;
+const MAP_SCALE=Math.max(1,Math.sqrt(MATCH_CAPACITY/2));
+const TEAM_CONFIGS=globalThis.matchEngine?.teams??globalThis.matchBootstrap?.participants??[
+  {id:'player',name:'蓝方',color:'#4c91d1',bot:false,status:'active',slot:0},
+  {id:'enemy',name:'红方',color:'#db594b',bot:true,status:'active',slot:1},
+];
+const BOARD={left:-51*U*MAP_SCALE,right:51*U*MAP_SCALE,top:-47*V*MAP_SCALE,bottom:47*V*MAP_SCALE};
+const localTeam=()=>ENGINE_ONLY?'player':((observedMatch??globalThis.matchBootstrap)?.self?.team??'observer');
+const TEAM_CONFIG_INDEX=new Map(TEAM_CONFIGS.map(p=>[p.id,p]));
+const teamConfig=team=>TEAM_CONFIG_INDEX.get(team);
+const isHostile=team=>game.perspective!=='observer' && team!=='neutral' && team!==game.perspective;
+const humanTeam=team=>globalThis.matchEngine?.humanTeams?.includes(team)??(team==='player' && Boolean(globalThis.matchEngine?.humanControlled));
 const SURFACES = {
   field:[123,133,87,0,.74,0], meadow:[143,150,95,0,1,0], scrub:[82,104,67,0,.86,.08],
   dirt:[158,126,92,0,.16,.63], road:[147,111,78,0,.04,.32],
@@ -70,7 +81,8 @@ const recoveringOre = new Map();
 const ground = new Map();
 const hillHeights=new Map();
 const reducedMotion = ENGINE_ONLY?{matches:false}:matchMedia('(prefers-reduced-motion: reduce)');
-const bounds={minX:-49,minY:-49,maxX:49,maxY:49};
+const mapLimit=Math.ceil(49*MAP_SCALE);
+const bounds={minX:-mapLimit,minY:-mapLimit,maxX:mapLimit,maxY:mapLimit};
 const mapTiles=[];
 for (let x=bounds.minX;x<=bounds.maxX;x++) {
   for (let y=bounds.minY;y<=bounds.maxY;y++) {
@@ -79,25 +91,26 @@ for (let x=bounds.minX;x<=bounds.maxX;x++) {
 }
 const battlefield=generateBattlefield();
 const [blueOrigin,redOrigin]=battlefield.origins;
-const mcv = {
-  x:blueOrigin.x, y:blueOrigin.y-1, id:2, team:'player', type:'mcv', label:'基地车', speed:2.55, vision:5.8,
-  heading:.16, mode:'idle', route:[], goal:null, health:MCV_HEALTH,
-};
-const enemyMcv={...mcv,x:redOrigin.x,y:redOrigin.y-1,id:4,team:'enemy',route:[]};
-const units=[mcv,enemyMcv];
+const initialVehicles=TEAM_CONFIGS.filter(team=>team.status==='active').map((team,index)=>{
+  const origin=battlefield.origins[team.slot??index]??blueOrigin;
+  return {x:origin.x,y:origin.y-1,id:2+index*2,team:team.id,type:'mcv',label:'基地车',speed:2.55,vision:5.8,
+    heading:.16,mode:'idle',route:[],goal:null,health:280};
+});
+const mcv=initialVehicles[0]??{...blueOrigin};
+const enemyMcv=initialVehicles[1]??{...redOrigin};
+const units=[...initialVehicles];
 const structures=battlefield.oils.map(tile=>({type:'oil',...tile,team:'neutral',
-  width:OIL_FIELD.width,height:OIL_FIELD.height,health:OIL_FIELD.health,remaining:0,queue:[]}));
-const FACTIONS=Object.fromEntries(['player','enemy'].map(team=>[team,{
-  team,credits:1250,nextOrder:0,searched:new Map(),
-  strategy:(team==='player')===(MAP_SEED%2===0)?'conservative':'aggressive',expanding:false,nextExpansionPlan:0,
-  unitMix:0,vehicleMix:0,
-  reports:new Map(),defensive:false,recoveringAt:null,retreatBenchmark:0,threatPoint:null,
-  explored:new Map(),sight:new Set(),scentTargets:new Set(),
-  power:{supply:0,demand:0,rate:1},support:{fireRate:1,damage:1},factoryCount:0,factoryBonus:0,
-  raids:new Map(),lastRescueReport:-10,openingScout:null,
-  orders:{mode:'develop',task:'mobilize',target:null,source:'local'},commander:createCommander(team),
-}]));
-const factionName=team=>team==='enemy'?'红方':'蓝方';
+  width:2,height:2,health:350,remaining:0,queue:[]}));
+function createFaction(team) {
+  return {team,credits:1250,nextOrder:0,searched:new Map(),
+    strategy:(TEAM_CONFIGS.findIndex(item=>item.id===team)%2===0)===(MAP_SEED%2===0)?'conservative':'aggressive',expanding:false,nextExpansionPlan:0,
+    unitMix:0,vehicleMix:0,reports:new Map(),defensive:false,recoveringAt:null,retreatBenchmark:0,threatPoint:null,
+    explored:new Map(),sight:new Set(),scentTargets:new Set(),power:{supply:0,demand:0,rate:1},support:{fireRate:1,damage:1},factoryCount:0,factoryBonus:0,
+    raids:new Map(),lastRescueReport:-10,openingScout:null,
+    orders:{mode:'develop',task:'mobilize',target:null,source:'local'},commander:createCommander(team)};
+}
+const FACTIONS=Object.fromEntries(TEAM_CONFIGS.filter(team=>team.status==='active').map(team=>[team.id,createFaction(team.id)]));
+const factionName=team=>team==='observer'?'全局观察':teamConfig(team)?.name??(team==='enemy'?'红方':team==='player'?'蓝方':'未知阵营');
 const shots=[];
 const wrecks=[];
 const movementDust=[];
@@ -203,7 +216,32 @@ const TEAM_PAINT = {
   },
 };
 
-let nextUnitId=5;
+function factionColor(team) {return teamConfig(team)?.color??(team==='enemy'?'#df6155':team==='neutral'?'#d4aa72':'#4c91d1');}
+function installTeamPaint(team) {
+  const hex=factionColor(team),rgb=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+  const shade=scale=>'#'+rgb.map(n=>Math.round(Math.min(255,n*scale)).toString(16).padStart(2,'0')).join('');
+  TEAM_PAINT[team]={body:[shade(1.15),shade(.42),shade(.7)],trim:[shade(1.45),shade(.65),shade(1)],light:shade(1.6),dark:shade(.4),radar:hex};
+}
+for(const config of TEAM_CONFIGS)if(!['player','enemy'].includes(config.id))installTeamPaint(config.id);
+const teamArtCache=new WeakMap();
+function teamArt(image,team) {
+  if(!image?.naturalWidth || team==='neutral' || team==='enemy' || team==='player' && factionColor(team)==='#4c91d1')return image;
+  const color=factionColor(team);let cache=teamArtCache.get(image);
+  if(!cache){cache=new Map();teamArtCache.set(image,cache);}if(cache.has(color))return cache.get(color);
+  const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+  const painter=canvas.getContext('2d',{willReadFrequently:true});painter.drawImage(image,0,0);
+  const pixels=painter.getImageData(0,0,canvas.width,canvas.height),rgb=[1,3,5].map(i=>parseInt(color.slice(i,i+2),16));
+  for(let i=0;i<pixels.data.length;i+=4) {
+    const r=pixels.data[i],g=pixels.data[i+1],b=pixels.data[i+2];
+    const mask=Math.min(1,Math.max(0,(b-r-12)/28))*Math.min(1,Math.max(0,(b-g+1)/18));
+    if(!mask || !pixels.data[i+3])continue;
+    const light=(r+g+b)/3/135;
+    for(let c=0;c<3;c++)pixels.data[i+c]=Math.round(pixels.data[i+c]*(1-mask)+Math.min(255,rgb[c]*light)*mask);
+  }
+  painter.putImageData(pixels,0,0);canvas.unitTheme=image.unitTheme;canvas.naturalWidth=canvas.width;canvas.naturalHeight=canvas.height;cache.set(color,canvas);if(cache.size>20)cache.delete(cache.keys().next().value);return canvas;
+}
+
+let nextUnitId=Math.max(4,...initialVehicles.map(unit=>unit.id))+1;
 
 const camera={x:blueOrigin.x+1.8,y:blueOrigin.y+2.6};
 const viewport = {w: 0, h: 0, dpr: 1, get scale() { return this.w<610 ? .49 : .70; }};
@@ -212,7 +250,7 @@ const radarTerrain=ENGINE_ONLY?null:document.createElement('canvas');
 let radarTerrainCache=null;
 const game = {
   selection:[], selectedBuilding:null, hoverTarget:null, placement:null, time:0,
-  perspective:'player', outcome:null,
+  perspective:ENGINE_ONLY?'player':globalThis.matchBootstrap?.team??'observer', outcome:null,
   get selected() { return this.selection.length===1 ? this.selection[0] : null; },
   follow:null, notice:'', noticeUntil:0, radarLayout:null, firstEngagement:false,
 };
@@ -337,8 +375,13 @@ function generateBattlefield() {
   const angle=hash(8,13,70)*Math.PI*2;
   const spreadX=36+hash(5,2,70)*4,spreadY=31+hash(7,4,70)*4;
   const location=inverse(Math.cos(angle)*U*spreadX,Math.sin(angle)*V*spreadY);
-  const origins=[{x:Math.round(location.x),y:Math.round(location.y)},
-    {x:Math.round(-location.x+hash(14,2,70)*3-1.5),y:Math.round(-location.y+hash(3,14,70)*3-1.5)}];
+  const origins=MATCH_CAPACITY===2?[{x:Math.round(location.x),y:Math.round(location.y)},
+    {x:Math.round(-location.x+hash(14,2,70)*3-1.5),y:Math.round(-location.y+hash(3,14,70)*3-1.5)}]:
+    Array.from({length:MATCH_CAPACITY},(_,index)=>{
+      const theta=angle+index*Math.PI*2/MATCH_CAPACITY;
+      const point=inverse(Math.cos(theta)*U*spreadX*MAP_SCALE,Math.sin(theta)*V*spreadY*MAP_SCALE);
+      return {x:Math.round(point.x),y:Math.round(point.y)};
+    });
   const midpoint={x:(origins[0].x+origins[1].x)/2,y:(origins[0].y+origins[1].y)/2};
   const separation=distanceTo(origins[0],origins[1]);
   const dx=(origins[1].x-origins[0].x)/separation,dy=(origins[1].y-origins[0].y)/separation;
@@ -393,7 +436,8 @@ function generateBattlefield() {
   addRoad(origins[0],west,0);
   addRoad(west,east,0,1.35);
   addRoad(east,origins[1],0);
-  for (const [index,mine] of seams.slice(0,2).entries()) addRoad(origins[index],mine,0);
+  for (const [index,mine] of seams.slice(0,origins.length).entries()) addRoad(origins[index],mine,0);
+  for (let i=2;i<origins.length;i++) addRoad(origins[i],origins[(i+1)%origins.length],0,1.4);
   for (const oil of oils) {
     const road=nearestMapSite(oil,tile=>roads.has(tileKey(tile.x,tile.y)) && !sameTile(oil,tile));
     if (road) addRoad(oil,road,0);
@@ -548,11 +592,11 @@ function tileUnder(x,y) {
 }
 
 function viewFaction() {
-  return FACTIONS[game.perspective];
+  return FACTIONS[game.perspective]??Object.values(FACTIONS)[0]??{team:'observer',explored:new Map(),sight:new Set(),scentTargets:new Set()};
 }
 
 function visible(x,y) {
-  return viewFaction().explored.has(tileUnder(x,y));
+  return ENGINE_ONLY || viewFaction().explored.has(tileUnder(x,y));
 }
 
 function canSeeEntity(faction,entity) {
@@ -573,7 +617,7 @@ function knowsBuilding(faction,building) {
 }
 
 function structureVisible(building) {
-  return canSeeEntity(viewFaction(),building);
+  return ENGINE_ONLY || canSeeEntity(viewFaction(),building);
 }
 
 function reveal(faction,x,y,radius,initial=false) {
@@ -639,18 +683,7 @@ function log(message,team=null,loggedTime=game.time,plan=null,metrics=null) {
     matchEngine.log(message,team,loggedTime,plan,metrics);
     return;
   }
-  const entry = document.createElement('li');
-  if (team) entry.dataset.team=team;
-  entry.hidden=Boolean(team && team!==game.perspective);
-  const time = document.createElement('time');
-  const seconds = Math.floor(loggedTime);
-  time.textContent = String(Math.floor(seconds / 60)).padStart(2,'0') + ':' + String(seconds % 60).padStart(2,'0');
-  const text = document.createElement('span');
-  text.textContent = message;
-  entry.append(time,text);
-  const history = byId('log');
-  history.prepend(entry);
-  while (history.children.length > 64) history.lastElementChild.remove();
+
 }
 
 function notice(message,team=null) {
@@ -734,6 +767,27 @@ const HELICOPTER_POSES=[
   {hub:[20.14,38.57],tail:[-1.33,-33.82]},
 ];
 const periodUnitHeights={soldier:42,engineer:39,rocketeer:43,mortar:41,cavalry:40,mountedCavalry:57};
+const themedUnitTypes={soldier:'soldier',engineer:'engineer',rocketeer:'rocketeer',mortar:'mortar',cavalry:'soldier',mountedCavalry:'mountedCavalry',horse:'horse'};
+const themedArmyStyles=new Set(['qinhan','tang','qing','europe','space']);
+function armyStyle(team) {return resolveBuildingTheme((ENGINE_ONLY?globalThis.matchEngine.buildingStyles:(observedMatch??globalThis.matchBootstrap)?.buildingStyles)?.[team]);}
+function unitArt(type,facing,team) {
+  const style=armyStyle(team),tint=factionTint(team),variant=themedUnitTypes[type]??(style==='space'&&['mcv','miner','tank','artillery'].includes(type)?type:null);
+  if(themedArmyStyles.has(style)&&variant) {
+    const key=style+'-'+variant+'-'+facing+'-'+tint;
+    const image=sprites.get(key)??asset(key);image.unitTheme=style;
+    if(image.naturalWidth)return teamArt(image,team);
+  }
+  return teamArt(sprites.get(type+'-'+facing+'-'+tint),team);
+}
+function unitLabel(type,team) {
+  const style=armyStyle(team);
+  const names={space:{soldier:'动力装甲兵',engineer:'太空工程师',rocketeer:'反装甲战士',mortar:'能量迫击兵',cavalry:'机动骑兵',mountedCavalry:'机械骑兵',horse:'机械战马'},qinhan:{soldier:'秦兵',engineer:'秦汉工匠',rocketeer:'重弩手',mortar:'投石兵',cavalry:'秦骑兵',mountedCavalry:'秦骑兵'},
+    tang:{soldier:'唐军步兵',engineer:'唐代工匠',rocketeer:'重弩手',mortar:'投石兵',cavalry:'唐骑兵',mountedCavalry:'唐骑兵'},
+    qing:{soldier:'清军步兵',engineer:'清代工匠',rocketeer:'重铳手',mortar:'臼炮兵',cavalry:'清骑兵',mountedCavalry:'清骑兵'},
+    europe:{soldier:'步枪兵',engineer:'工兵',cavalry:'骑兵',mountedCavalry:'骑兵'}};
+  return names[style]?.[type]??PRODUCTS[type]?.label??'骑兵';
+}
+
 const TANK_HULL_POSES=[
   {rect:[22,190,282,154],mount:[172,229],width:89,ground:17},
   {rect:[336,148,268,217],mount:[478,225],width:83,ground:24},
@@ -763,7 +817,7 @@ for (const type of Object.keys(unitSpriteWidths)) {
   for (let facing=0;facing<4;facing++) {
     for (const tint of ['blue','red']) {
       const key=type+'-'+facing+'-'+tint;
-      asset(key,periodUnitHeights[type]?'mountain-'+key:key);
+      asset(key);
     }
   }
 }
@@ -928,7 +982,7 @@ function requestTerrainChunk(job) {
   terrainJob=job;
   if (!terrainWorkerFailed && !terrainWorker && typeof Worker==='function' && typeof OffscreenCanvas==='function') {
     try {
-      const worker=new Worker('terrain-worker.js?v=box-selection');
+      const worker=new Worker('terrain-worker.js?v=multiplayer-themes');
       terrainWorker=worker;
       worker.onmessage=({data})=>{
         if (terrainWorker===worker) saveTerrainChunk(data.key,data.art);
@@ -943,7 +997,7 @@ function requestTerrainChunk(job) {
         terrainJob=null;
         terrainRevision++;
       };
-      worker.postMessage({seed:MAP_SEED,texture:groundTexture});
+      worker.postMessage({seed:MAP_SEED,capacity:MATCH_CAPACITY,texture:groundTexture});
     } catch {
       terrainWorker?.terminate();
       terrainWorker=null;
@@ -1773,20 +1827,20 @@ function drawIdleExhaust(context,unit,origin,phase) {
 const GAIT_LIMBS={
   soldier:[
     [
-      [[49,107],[16,179],.5,[[31,105],[58,110],[66,128],[54,153],[42,190],[0,190],[0,156]]],
-      [[65,106],[91,179],0,[[58,102],[83,103],[111,127],[121,174],[123,190],[46,190],[61,148],[66,128]]],
+      [[63,109],[23,181],.5,[[49,105],[72,111],[67,136],[43,160],[35,183],[30,190],[0,190],[5,171],[30,145],[42,123]]],
+      [[79,108],[101,181],0,[[70,105],[93,109],[101,136],[97,158],[113,172],[125,180],[124,190],[77,190],[72,172],[71,152],[66,137]]],
     ],
     [
-      [[29,108],[22,150],.5,[[8,107],[34,107],[42,128],[36,158],[0,164],[0,119]]],
-      [[47,112],[49,183],0,[[35,104],[76,111],[76,156],[67,190],[28,190],[35,151]]],
+      [[43,109],[27,153],.5,[[30,104],[55,108],[63,128],[49,144],[38,163],[14,164],[17,144],[26,128]]],
+      [[66,110],[78,181],0,[[55,104],[80,110],[83,142],[79,165],[94,171],[103,183],[101,190],[60,190],[58,172],[61,140]]],
     ],
     [
-      [[54,104],[75,144],.5,[[52,102],[76,101],[97,126],[97,154],[67,159],[57,138]]],
-      [[42,106],[20,177],0,[[20,105],[54,100],[66,117],[57,139],[42,190],[0,190],[0,151]]],
+      [[77,106],[77,148],.5,[[65,103],[89,104],[96,127],[94,149],[76,160],[51,153],[57,132]]],
+      [[56,108],[15,182],0,[[39,104],[70,106],[74,131],[53,159],[36,179],[34,190],[0,190],[0,175],[21,143]]],
     ],
     [
-      [[56,107],[56,151],.5,[[48,104],[70,104],[75,150],[49,163],[46,130]]],
-      [[35,109],[39,181],0,[[21,110],[47,104],[51,138],[60,188],[23,190],[19,147]]],
+      [[58,109],[68,156],.5,[[46,107],[69,105],[78,126],[81,148],[73,165],[51,164],[47,141]]],
+      [[34,109],[34,181],0,[[20,106],[46,106],[52,134],[48,164],[49,185],[39,190],[18,190],[16,175],[19,142]]],
     ],
   ],
   dog:[
@@ -1844,7 +1898,7 @@ function gaitLayers(image,type,facing,equine) {
   body.globalCompositeOperation='destination-out';
   const count=equine && facing!==3?4:2;
   const top=Math.round(h*(type==='engineer'?.70:equine?.67:.60));
-  const definitions=GAIT_LIMBS[type]?.[facing] ?? Array.from({length:count},(_,index)=>{
+  const definitions=(!image.unitTheme&&GAIT_LIMBS[type]?.[facing]) || Array.from({length:count},(_,index)=>{
     const left=Math.round(w*index/count),right=Math.round(w*(index+1)/count);
     const x=(left+right)/2;
     return [[x,top],[x,h-2],index%2*.5,[[left,top],[right,top],[right,h],[left,h]]];
@@ -1975,7 +2029,7 @@ function drawIdlePose(context,image,width,height,phase,type) {
 }
 
 function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
-  const atlas=sprites.get('tank-reference-'+factionTint(unit.team));
+  const atlas=teamArt(sprites.get('tank-reference-'+factionTint(unit.team)),unit.team);
   if (!atlas?.naturalWidth) return false;
   const heading=unit.turretHeading??unit.heading;
   const direction=project(Math.cos(heading),Math.sin(heading));
@@ -2005,11 +2059,35 @@ function drawTankAssembly(context,unit,origin,facing,mirror,strength) {
   return true;
 }
 
+const SPACE_TANK_HULL_MOUNTS=[[.496,.229],[.505,.328],[.505,.30],[.5,.355]];
+const SPACE_TANK_TURRET_MOUNTS=[[.28,.88],[.28,.69],[.31,.84],[.505,.55]];
+function drawSpaceTankAssembly(context,unit,origin,facing,mirror,strength) {
+  const aim=project(Math.cos(unit.turretHeading??unit.heading),Math.sin(unit.turretHeading??unit.heading));
+  const angle=Math.atan2(aim.y,Math.abs(aim.x));
+  const turretFacing=angle<-.22?2:angle<.22?0:angle>1.02?3:1;
+  const get=kind=>{
+    const name='space-tank-'+kind+'-'+(kind==='hull'?facing:turretFacing)+'-'+factionTint(unit.team);
+    return teamArt(sprites.get(name)??asset(name),unit.team);
+  };
+  const hull=get('hull'),turret=get('turret');if(!hull?.naturalWidth||!turret?.naturalWidth)return false;
+  const width=[95,90,92,60][facing],height=width*hull.naturalHeight/hull.naturalWidth;
+  const tw=[94,84,87,53][turretFacing],th=tw*turret.naturalHeight/turret.naturalWidth;
+  const [hx,hy]=SPACE_TANK_HULL_MOUNTS[facing],[tx,ty]=SPACE_TANK_TURRET_MOUNTS[turretFacing];
+  const ground=[17,24,20,30][facing],bounce=strength>.025?Math.sin((unit.travel??0)*14)*.43*strength:0;
+  context.save();context.translate(origin.x,origin.y+ground+bounce);
+  if(strength>.025)context.rotate(unit.lean??0);
+  context.save();if(mirror)context.scale(-1,1);context.drawImage(hull,-width/2,-height,width,height);context.restore();
+  context.translate((hx-.5)*width*(mirror?-1:1),(hy-1)*height);
+  if(aim.x<0&&turretFacing!==3)context.scale(-1,1);
+  context.rotate((angle-[0,Math.atan2(V,U),-Math.atan2(V,U),Math.PI/2][turretFacing])*.35);
+  context.drawImage(turret,-tx*tw,-ty*th,tw,th);context.restore();return true;
+}
+
 function drawTransportHelicopter(context,unit,origin) {
   const forward=project(Math.cos(unit.heading),Math.sin(unit.heading));
   const angle=Math.atan2(forward.y,Math.abs(forward.x));
   const facing=angle<-.22?2:angle<.22?0:angle>1.02?3:1;
-  const image=sprites.get('helicopter-'+facing+'-'+factionTint(unit.team));
+  const image=teamArt(sprites.get('helicopter-'+facing+'-'+factionTint(unit.team)),unit.team);
   if (!image?.naturalWidth) return;
   const width=unitSpriteWidths.helicopter[facing],height=width*image.naturalHeight/image.naturalWidth;
   const {hub:[hx,hy],tail:[tx,ty]}=HELICOPTER_POSES[facing];
@@ -2047,7 +2125,7 @@ function drawTransportHelicopter(context,unit,origin) {
 function renderUnit(context,unit,origin) {
   const paint=TEAM_PAINT[unit.team];
   if (unit.type==='helicopter') return drawTransportHelicopter(context,unit,origin);
-  const hostile=unit.team==='enemy';
+  const hostile=isHostile(unit.team);
   const wheeled=Boolean(VEHICLE_CONTACT_RADIUS[unit.type]);
   const dog=unit.type==='dog';
   const equine=unit.type==='horse' || unit.type==='mountedCavalry';
@@ -2064,8 +2142,8 @@ function renderUnit(context,unit,origin) {
   const spriteWidth=unitSpriteWidths[spriteType][facing]*(unit.type==='bomber'?1.15:unit.type==='reconPlane'?.80:1);
   const offset=wheeled?[12,25,20,31][facing]:quadruped?[3,8,6,8][facing]:2;
   const mirror=forward.x<0 && facing!==3;
-  if (unit.type==='tank' && drawTankAssembly(context,unit,origin,facing,mirror,strength)) return;
-  const image=sprites.get(spriteType+'-'+facing+'-'+factionTint(unit.team));
+  if(unit.type==='tank' && (armyStyle(unit.team)==='space'?drawSpaceTankAssembly(context,unit,origin,facing,mirror,strength):drawTankAssembly(context,unit,origin,facing,mirror,strength)))return;
+  const image=unitArt(spriteType,facing,unit.team);
   if (image?.naturalWidth) {
     const height=periodUnitHeights[spriteType]??spriteWidth*image.naturalHeight/image.naturalWidth;
     const width=height*image.naturalWidth/image.naturalHeight;
@@ -2219,7 +2297,7 @@ function structureArt(building) {
   const theme=BUILDING_THEMES[style];
   const tint=team==='neutral'?'neutral':factionTint(team);
   const filename=ENGINE_ONLY?null:buildingThemeAsset(style,type,tint,building.axis);
-  const image=filename?(sprites.get(filename)??asset(filename)):null;
+  const image=filename?teamArt(sprites.get(filename)??asset(filename),team):null;
   const position=yardCenter(building);
   const center=project(position.x,position.y);
   const width=theme.widths[type]??BUILDING_WIDTHS[type];
@@ -2263,7 +2341,7 @@ function drawBuildingActivity(context,building,art) {
   const time=lastFrame*.001+hash(building.x,building.y,97)*5;
   const phase=time*(active?4:1.7)*(.55+.45*rate);
   const signal=type==='laser' || type==='solar' || type==='barracks';
-  const color=signal?(team==='enemy'?'#ff794b':'#8ad8ff'):'#ffca7e';
+  const color=signal?factionColor(team):'#ffca7e';
   for (const [i,[x,y]] of lights.entries()) {
     const wave=.5+.5*Math.cos(phase-i*(type==='airport'?1.45:1.9));
     const strength=(active?.30+.55*wave:.20+.34*wave)*(.42+.58*rate);
@@ -2706,7 +2784,7 @@ function drawWorld() {
     objects.push(...structureLayers(building,structureArt(building),unitLayers.filter(layer=>!layer.air),transform));
   }
   objects.push(...unitLayers);
-  for (const unit of game.selection) if (unit.team===game.perspective) drawRoute(unit);
+  for (const unit of game.selection) if (game.perspective==='observer'||unit.team===game.perspective) drawRoute(unit);
   drawRallyPoint(game.selectedBuilding);
   objects.sort((a,b)=>Number(Boolean(a.air))-Number(Boolean(b.air)) || a.depth-b.depth);
   for (const item of objects) {
@@ -2747,7 +2825,7 @@ function drawWorld() {
     if (building.health<spec.health || targets.has(building)) {
       drawHealth({x:p.x,y:p.y+12},building,spec.health,42);
     }
-    const hostile=building.team==='enemy';
+    const hostile=isHostile(building.team);
     const name=buildingCaption(building);
     const label=pending?name+' '+progress+'%':building.serviceStatus==='坦克维修中'?name+' · 坦克维修中':name;
     tagLabel(ctx,p,label,hostile?'#ef987a':pending?'#e7c17d':
@@ -3100,7 +3178,7 @@ function findOreFrontier(miner) {
 function setCourse(target,kind,unit,course=findPath(target,unit),{allowUnexplored=false}={}) {
   if (!allowUnexplored && !FACTIONS[unit.team].explored.has(tileUnder(target.x,target.y))) return false;
   if (!course) {
-    if (unit.team==='player') {
+    if (humanTeam(unit.team)) {
       notice('该位置无法通行',unit.team);
       log('未找到通往目标的路线。',unit.team);
     }
@@ -3164,7 +3242,7 @@ function reservedDock(cell) {
 
 function returnToBase(miner,resume=null,reason='矿车正在返回精炼厂。') {
   if (miner?.type!=='miner') return;
-  const own=miner.team==='player';
+  const own=humanTeam(miner.team);
   const depots=structures.filter(building=>refineryReady(building,miner.team)).flatMap(building=>{
     const main=dockFor(building);
     return [0,-1,1].map(offset=>{
@@ -3226,7 +3304,7 @@ function arrive(unit) {
   } else if (goal.kind==='mine' && amountAt(goal.x,goal.y)>0) {
     unit.mode='mining';
     unit.mine={x:goal.x,y:goal.y};
-    if (unit.team==='player') log('矿车开始开采。',unit.team);
+    log('矿车开始开采。',unit.team);
   } else if (goal.kind==='dock' && unit.cargo>0 && structures.includes(unit.refinery)) {
     unit.mode='unloading';
     unit.unloadTimer=.70;
@@ -3234,7 +3312,7 @@ function arrive(unit) {
     unit.mode='garage-enter';
   } else {
     unit.mode='idle';
-    if (goal.kind==='move' && unit.team==='player') log(unit.label+'已抵达目的地。',unit.team);
+    if (goal.kind==='move' && humanTeam(unit.team)) log(unit.label+'已抵达目的地。',unit.team);
   }
   unit.goal=null;
 }
@@ -3248,7 +3326,7 @@ function harvest(miner,dt) {
   const left=remaining-load;
   if (load>0) {
     takeOre(cell,left);
-    if (miner.team==='player' || visible(miner.x,miner.y)) playAt('mining',miner);
+    if (visible(miner.x,miner.y)) playAt('mining',miner);
   }
   if (miner.cargo>=CARGO_LIMIT-.001 || left<=.001) {
     const depleted=left<=.001;
@@ -3276,15 +3354,13 @@ function advanceMiner(miner,dt) {
     miner.cargo=0;
     miner.mode='idle';
     if (visible(miner.x,miner.y)) playAt('cash',miner);
-    if (miner.team==='player') {
-      log('精炼入库 +' + hauled + ' 储备。',miner.team);
-    }
+    log('精炼入库 +' + hauled + ' 储备。',miner.team);
     const next=miner.returnTo;
     miner.returnTo=null;
     const course=next && amountAt(next.x,next.y)>0 && findPath(next,miner);
     if (course) {
       setCourse(next,'mine',miner,course);
-      if (miner.team==='player') log('矿车已再次前往矿脉。',miner.team);
+      if (humanTeam(miner.team)) log('矿车已再次前往矿脉。',miner.team);
     } else if (miner.autoMine) {
       dispatchMiner(miner);
     }
@@ -3946,7 +4022,7 @@ function navigate(unit,dt) {
       if (!path) {
         unit.goal=null;
         unit.mode='idle';
-        if (unit.team==='player' && goal?.kind!=='ore-scout') log(unit.label+'的路线被阻挡。',unit.team);
+        if (humanTeam(unit.team) && goal?.kind!=='ore-scout') log(unit.label+'的路线被阻挡。',unit.team);
       }
       break;
     }
@@ -4256,7 +4332,7 @@ function captureBuilding(building,team,mission) {
 }
 
 function advanceOilFields() {
-  const incomes={player:0,enemy:0};
+  const incomes=Object.fromEntries(Object.keys(FACTIONS).map(team=>[team,0]));
   for (const field of structures) {
     if (field.type!=='oil' || field.team==='neutral' || field.nextPayout>game.time) continue;
     field.nextPayout+=OIL_INTERVAL;
@@ -4313,7 +4389,7 @@ function enqueue(building,type,deferPayment=false) {
 }
 
 function supportsRally(building) {
-  return building?.team==='player' && (building.type==='factory' || building.type==='barracks');
+  return Boolean(FACTIONS[building?.team]) && (building.type==='factory' || building.type==='barracks');
 }
 
 function rallyTileAvailable(tile) {
@@ -4447,7 +4523,7 @@ function advanceProduction(dt) {
   refreshPowerGrids();
   for (const building of structures) {
     if (building.remaining>0) continue;
-    const own=building.team==='player';
+    const own=humanTeam(building.team);
     if (building.pendingGift && spawnUnit(building,'miner')) {
       building.pendingGift=false;
       if (own) {
@@ -5427,7 +5503,7 @@ function advanceFaction(faction) {
   faction.nextOrder=game.time+.55;
   const buildings=structures.filter(building=>building.team===team && building.health>0);
   const members=units.filter(unit=>unit.team===team && unit.health>0);
-  if (team==='player' && globalThis.matchEngine?.humanControlled) {
+  if (humanTeam(team)) {
     refreshVision(faction,members,buildings);
     dispatchTankRepairs(faction,buildings.filter(building=>building.type==='repairDepot'),
       members.filter(unit=>REPAIR_TANKS.has(unit.type)));
@@ -5627,7 +5703,7 @@ function orderAttack(members,target,automatic=false) {
     unit.automaticAttack=automatic;
     unit.nextApproach=0;
     if (unit.type==='miner') unit.returnTo=null;
-    if (unit.type==='dog' && (unit.team==='player' || visible(unit.x,unit.y))) playAt('bark',unit);
+    if (unit.type==='dog' && visible(unit.x,unit.y)) playAt('bark',unit);
     unit.route=[];
     unit.goal=null;
     unit.mode='idle';
@@ -5646,7 +5722,7 @@ function clearAttackOrder(unit) {
 
 function orderPlayerMovement(members,tile) {
   const pending=new Set(members.sort((a,b)=>distanceTo(a,tile)-distanceTo(b,tile)));
-  const mine=members.some(unit=>unit.type==='miner') && FACTIONS.player.explored.has(tileKey(tile.x,tile.y)) &&
+  const mine=members.some(unit=>unit.type==='miner') && FACTIONS[members[0].team].explored.has(tileKey(tile.x,tile.y)) &&
     amountAt(tile.x,tile.y)>0;
   let ordered=0;
   for (const unit of pending) {
@@ -5677,8 +5753,9 @@ function orderPlayerMovement(members,tile) {
   return ordered;
 }
 
-function executePlayerOrder(order,resolve) {
-  const faction=FACTIONS.player;
+function executePlayerOrder(order,resolve,team='player') {
+  const faction=FACTIONS[team];
+  if (!faction) return {error:'unavailable'};
   const success=(ordered=1)=>({ordered});
   const fail=error=>({error});
   const own=entity=>entity?.team===faction.team && entity.health>0;
@@ -5692,7 +5769,7 @@ function executePlayerOrder(order,resolve) {
   if (order.kind==='deploy') {
     if (!own(selected) || selected.type!=='mcv') return fail('unavailable');
     if (!deployYard(selected)) return fail('placement');
-    log('蓝方基地车开始部署。',faction.team);
+    log(factionName(faction.team)+'基地车开始部署。',faction.team);
     return success();
   }
   if (order.kind==='produce' || order.kind==='cancel-production') {
@@ -5717,7 +5794,7 @@ function executePlayerOrder(order,resolve) {
       const tile=order.type==='wall'?{x,y,axis:order.axis==='y'?'y':'x'}:{x,y};
       const building=beginConstruction(order.type,tile,faction.team);
       if (!building) return fail('placement');
-      log('蓝方'+spec.label+'开始施工。',faction.team);
+      log(factionName(faction.team)+spec.label+'开始施工。',faction.team);
       playAt('build',yardCenter(building),building);
       return success();
     }
@@ -6065,14 +6142,11 @@ function advanceCombat(dt=.04) {
 }
 
 function checkMatchResult() {
-  const defeated=Object.keys(FACTIONS).filter(team=>
-    !units.some(unit=>unit.team===team && unit.health>0) &&
-    !structures.some(building=>building.team===team && building.health>0));
-  if (!defeated.length) return;
-  const outcome=defeated.length===2?'draw':defeated[0]==='enemy'?'player':'enemy';
-  game.outcome=outcome;
-  game.follow=null;
-  pressed.clear();
+  if (globalThis.matchEngine?.managed) return;
+  const teams=Object.keys(FACTIONS);
+  const alive=teams.filter(team=>units.some(unit=>unit.team===team && unit.health>0) || structures.some(building=>building.team===team && building.health>0));
+  if (alive.length>1 || teams.length<2) return;
+  game.outcome=alive[0]??'draw';game.follow=null;pressed.clear();
 }
 
 function hostileMarker(context,p,size) {
@@ -6084,7 +6158,7 @@ function drawHealth(point,entity,max,width) {
   const ratio=Math.max(0,entity.health/max);
   ctx.fillStyle='#1c251df1';
   ctx.fillRect(point.x-width/2,point.y,width,5);
-  ctx.fillStyle=entity.team==='enemy'?'#e48064':ratio>.36?'#b3cf86':'#e4b16b';
+  ctx.fillStyle=isHostile(entity.team)?'#e48064':ratio>.36?'#b3cf86':'#e4b16b';
   ctx.fillRect(point.x-width/2+1,point.y+1,(width-2)*ratio,3);
 }
 
@@ -6101,12 +6175,13 @@ function drawUnitStatus(unit) {
     diamondAt(ctx,ground,UNIT_ART[unit.type].bracket,UNIT_ART[unit.type].small?8:16,
       '#ed98731a','#ef987a',1.5);
   }
-  if (unit.team==='enemy') hostileMarker(ctx,point,5);
+  if (isHostile(unit.team)) hostileMarker(ctx,point,5);
+  if(game.perspective==='observer'){ctx.fillStyle=factionColor(unit.team);ctx.strokeStyle='#142018';ctx.lineWidth=.8;ctx.beginPath();ctx.arc(point.x+10,point.y-2,2.4,0,Math.PI*2);ctx.fill();ctx.stroke();}
   if (viewFaction().scentTargets.has(unit)) {
     ctx.fillStyle='#ffdc88';
     ctx.beginPath();ctx.arc(point.x+10,point.y,2.3,0,Math.PI*2);ctx.fill();
   }
-  if (hp && (unit.team==='enemy' || unit.health<hp || game.selection.includes(unit))) {
+  if (hp && (isHostile(unit.team) || unit.health<hp || game.selection.includes(unit))) {
     drawHealth({x:point.x,y:point.y-7},unit,hp,UNIT_ART[unit.type].small?19:27);
   }
   const rank=unit.rank??0;
@@ -6122,7 +6197,7 @@ function drawCombat() {
     const age=game.time-time;
     if (type==='laser') {
       if (age<.19) {
-        const tint=team==='player'?'#69e8ff':'#ff8c77';
+        const tint=TEAM_PAINT[team]?.light??'#69e8ff';
         const fade=1-age/.19;
         ctx.globalAlpha=fade*.40;
         stroke(ctx,from.x,from.y,to.x,to.y,tint,10);
@@ -6261,7 +6336,9 @@ function purchaseButton(type,spec,label=spec.label) {
   if (spec.building) {
     const art=type==='helicopter'?'helicopter':isAirborne({type})?'fighter':type;
     const facing=type==='reconPlane'?2:1;
-    icon.src=sprites.get(art+'-'+facing+'-blue').src;
+    const team=localTeam(),style=armyStyle(team),variant=themedUnitTypes[art]??(style==='space'&&['mcv','miner','tank','artillery'].includes(art)?art:null);
+    icon.src='assets/'+(themedArmyStyles.has(style)&&variant?style+'-'+variant:art)+'-'+facing+'-blue.webp';
+    label=unitLabel(type,team);
   }
   const name=document.createElement('span');
   name.textContent=label;
@@ -6299,20 +6376,20 @@ function syncProductionQueue(building) {
 
 function syncPlayerBuildingControls(building) {
   const controls=byId('building-controls');
-  controls.hidden=!playerCanCommand() || building.team!=='player' || building.health<=0;
+  controls.hidden=!playerCanCommand() || building.team!==localTeam() || building.health<=0;
   byId('building-actions').hidden=controls.hidden;
   if (controls.hidden) return;
   const sell=byId('sell-building');
   sell.textContent='出售 +'+buildingSaleRefund(building);
   sell.title='按剩余耐久折价回收 50% 造价，另退已付款生产的未完成部分';
   const construction=byId('construction-control');
-  construction.hidden=!readyConstructionSite(building,'player');
+  construction.hidden=!readyConstructionSite(building,localTeam());
   if (!construction.hidden) {
     const options=byId('construction-options');
-    const theme=resolveBuildingTheme(observedMatch.buildingStyles?.player);
+    const theme=resolveBuildingTheme(observedMatch.buildingStyles?.[localTeam()]);
     for (const button of options.children) {
       const {type,axis='x'}=button.dataset;
-      button.disabled=FACTIONS.player.credits<BUILDINGS[type].cost;
+      button.disabled=FACTIONS[localTeam()].credits<BUILDINGS[type].cost;
       button.title=button.disabled?'储备不足':'点击后在地图上选址';
       button.setAttribute('aria-pressed',String(game.placement?.type===type && game.placement.axis===axis));
       if (options.dataset.theme!==theme) {
@@ -6322,8 +6399,8 @@ function syncPlayerBuildingControls(building) {
     options.dataset.theme=theme;
   }
   const products=byId('production-options');
-  if (products.dataset.source!==building.type) {
-    products.dataset.source=building.type;
+  if(products.dataset.source!==building.type+':'+armyStyle(building.team)) {
+    products.dataset.source=building.type+':'+armyStyle(building.team);
     products.replaceChildren(...Object.entries(PRODUCTS).filter(([type,spec])=>type!=='fighter' && spec.building===building.type)
       .map(([type,spec])=>purchaseButton(type,spec)));
   }
@@ -6339,7 +6416,7 @@ function syncBuildMenu() {
   const placing=Boolean(game.placement);
   byId('close-building').setAttribute('aria-label',placing?'取消放置':'取消选择');
   const spec=buildingSpec(building.type);
-  const job=building.team===game.perspective?building.queue[0]:null;
+  const job=game.perspective==='observer'||building.team===game.perspective?building.queue[0]:null;
   const weapon=spec.weapon;
   let progress=null;
   let status='待命';
@@ -6405,13 +6482,13 @@ function syncBuildMenu() {
 function deployCandidate() {
   if (!playerCanCommand() || game.placement) return null;
   const unit=[game.hoverTarget,game.selected].find(target=>target?.type==='mcv' &&
-    target.team==='player' && target.health>0 && units.includes(target));
+    target.team===localTeam() && target.health>0 && units.includes(target));
   return unit??null;
 }
 
 function deployBaseVehicle(unit) {
   if (!playerCanCommand() || game.placement || unit?.type!=='mcv' ||
-      unit.team!=='player' || unit.health<=0 || !units.includes(unit)) return;
+      unit.team!==localTeam() || unit.health<=0 || !units.includes(unit)) return;
   void sendPlayerOrder({kind:'deploy',source:unit.viewId},'基地车开始部署。');
 }
 
@@ -6433,17 +6510,17 @@ function syncPlayerPointer() {
     game.placement?'crosshair':game.hoverTarget?'pointer':'crosshair';
   const reticle=byId('target-cursor');
   const targeting=Boolean(mapPointer && !selecting && !edge && !game.placement &&
-    playerCanCommand() && game.selection.some(unit=>unit.team==='player' && unit.health>0 && WEAPONS[unit.type]));
+    playerCanCommand() && game.selection.some(unit=>unit.team===localTeam() && unit.health>0 && WEAPONS[unit.type]));
   map.classList.toggle('targeting',targeting);
   reticle.hidden=!targeting;
   if (targeting) {
-    reticle.dataset.hostile=String(game.hoverTarget?.team==='enemy');
+    reticle.dataset.hostile=String(Boolean(game.hoverTarget && isHostile(game.hoverTarget.team)));
     reticle.style.transform='translate('+(mapPointer.x-15)+'px,'+(mapPointer.y-15)+'px)';
   }
 }
 
 function ownGroupUnit(unit) {
-  return unit?.team==='player' && unit.health>0 && displayedUnits.get(unit.viewId)===unit;
+  return unit?.team===localTeam() && unit.health>0 && displayedUnits.get(unit.viewId)===unit;
 }
 
 function controlGroupMembers(number) {
@@ -6534,7 +6611,7 @@ function attachPlayerControls() {
   let selling=false;
   byId('sell-building').addEventListener('click',async()=>{
     const building=game.selectedBuilding;
-    if (selling || !playerCanCommand() || building?.team!=='player') return;
+    if (selling || !playerCanCommand() || building?.team!==localTeam()) return;
     selling=true;
     byId('sell-building').disabled=true;
     try {
@@ -6568,64 +6645,30 @@ function attachPlayerControls() {
   });
 }
 
-function syncCommanderHud() {
-  for (const faction of Object.values(FACTIONS)) {
-    const key=factionTint(faction.team);
-    const summary=byId(key+'-command');
-    summary.parentElement.hidden=faction.team!==game.perspective;
-    if (faction.team!==game.perspective) continue;
-    const human=faction.team==='player' && observedMatch?.mode==='human';
-    const lines=[human?'玩家指挥':faction.strategy==='conservative'?'保守型':'进取型'];
-    if (faction.experience?.sample) {
-      const {sample,wins,losses,draws,focus}=faction.experience;
-      lines.push('复盘最近 '+sample+' 局 · '+wins+' 胜 '+losses+' 负 '+draws+' 平');
-      const activeFocus=focus.filter(task=>Object.hasOwn(COMMAND_TASKS,task));
-      if (activeFocus.length) lines.push('本局重点：'+activeFocus.map(task=>COMMAND_TASKS[task].label).join('、'));
-    }
-    const plan=faction.commander.plan;
-    if (!human) lines.push((plan?commandLabel(plan):faction.orders.mode==='guard'?'紧急回援':'部署基地')+
-      (faction.orders.source==='Codex'?'（Codex）':'（本地智能体）'));
-    if (plan?.followup) lines.push('后续：'+commandLabel(plan.followup));
-    if (plan?.homeReserve) lines.push('基地留守 '+plan.homeReserve+' 个作战单位');
-    if (faction.factoryCount) {
-      lines.push('兵工厂 '+faction.factoryCount+' 座'+(faction.factoryBonus?
-        ' · 协同生产 +'+Math.round(faction.factoryBonus*100)+'%':''));
-    }
-    const buffs=[];
-    if (faction.support.fireRate>1) buffs.push('射速 +'+Math.round((faction.support.fireRate-1)*100)+'%');
-    if (faction.support.damage>1) buffs.push('伤害 +'+Math.round((faction.support.damage-1)*100)+'%');
-    if (buffs.length) lines.push(buffs.join(' · '));
-    summary.textContent=lines.join(' / ');
-  }
-}
-
 function syncHud() {
   const labels={idle:'待命',moving:'行驶中',mining:'开采中',returning:'返航中',unloading:'卸矿中'};
   const unit=game.selected;
   const cargo=Math.min(CARGO_LIMIT,Math.floor((unit?.cargo??0)+.001));
-  byId('credits').closest('.metric').hidden=game.perspective!=='player';
-  byId('red-credits').closest('.metric').hidden=game.perspective!=='enemy';
-  const budget=byId(game.perspective==='player'?'credits':'red-credits');
-  budget.textContent=viewFaction().credits.toLocaleString('zh-CN');
+  const observer=game.perspective==='observer';
+  byId('credits').closest('.metric').hidden=observer;
+  byId('red-credits').closest('.metric').hidden=true;
+  byId('credits').textContent=viewFaction().credits.toLocaleString('zh-CN');
+  byId('credits').previousElementSibling.textContent='我的储备';
+  byId('power').closest('.metric').hidden=observer;
   const power=viewFaction().power;
   byId('power').textContent=power.supply+' / '+power.demand;
   byId('power-label').textContent=power.rate<1?'供电不足 · '+Math.round(power.rate*100)+'%':'供电 / 负载';
   byId('power').parentElement.classList.toggle('power-low',power.rate<1);
-  for (const team of ['player','enemy']) {
-    const color=factionTint(team);
-    const own=team===game.perspective;
-    const visibleAndAlive=entity=>entity.team===team && entity.health>0 &&
-      (own || canSeeEntity(viewFaction(),entity));
-    byId(color+'-buildings-label').textContent=factionName(team)+(own?'建筑':'可见建筑');
-    byId(color+'-units-label').textContent=own?'活动单位':'可见单位';
-    byId(color+'-buildings').textContent=structures.filter(visibleAndAlive).length;
-    byId(color+'-units').textContent=units.filter(visibleAndAlive).length;
-  }
+  byId('blue-buildings-label').textContent=observer?'全场建筑':'我的建筑';
+  byId('blue-units-label').textContent=observer?'全场单位':'我的单位';
+  byId('blue-buildings').textContent=structures.filter(b=>b.team!=='neutral'&&(observer||b.team===game.perspective)).length;
+  byId('blue-units').textContent=units.filter(u=>observer||u.team===game.perspective).reduce((sum,u)=>sum+1+(u.passengerCount??0),0);
+  byId('red-buildings').closest('.metric').hidden=true;
   const building=game.selectedBuilding;
   const count=game.selection.length;
   const rank=unit?.rank?' · '+unit.rank+' 级':'';
   const group=unit?.marchSize?' · '+(unit.marchLeader?'领队':'队员')+' '+unit.marchSize+' 个单位':'';
-  byId('active-unit').textContent=unit ? factionName(unit.team)+unit.label+rank+group : count ? '已选 '+count+' 个单位' :
+  byId('active-unit').textContent=unit ? factionName(unit.team)+' '+unitLabel(unit.type,unit.team)+rank+group : count ? '已选 '+count+' 个单位' :
     building ? buildingSpec(building.type).label : '未选择单位';
   unitMenu.hidden=!count;
   byId('command-dock-empty').hidden=Boolean(building || count);
@@ -6677,7 +6720,6 @@ function syncHud() {
   const hint=playerCanCommand()?'左键选择或下令 · 拖动框选 · 右键取消':factionName(game.perspective)+'视角 · 拖动框选 · 滚轮移动视野';
   byId('instruction').textContent=(game.noticeUntil>game.time && game.notice) ||
     (game.follow?'跟踪中 · '+factionName(game.follow.team)+game.follow.label:hint);
-  syncCommanderHud();
   syncBuildMenu();
   syncPlayerPointer();
   syncControlGroups();
@@ -6868,15 +6910,15 @@ function mapClick(point) {
       });
       return;
     }
-    const selected=game.selection.filter(unit=>unit.team==='player');
+    const selected=game.selection.filter(unit=>unit.team===localTeam());
     if (selected.length && target && (
-      target.team==='enemy' && selected.some(unit=>WEAPONS[unit.type] && canAttackTarget(unit,target)) ||
-      target.width && target.team!=='player' && selected.some(unit=>unit.type==='engineer') ||
-      target.team==='player' && target.type==='helicopter' && selected.some(unit=>canTransport(target,unit)))) {
+      target.team!==localTeam() && target.team!=='neutral' && selected.some(unit=>WEAPONS[unit.type] && canAttackTarget(unit,target)) ||
+      target.width && target.team!==localTeam() && selected.some(unit=>unit.type==='engineer') ||
+      target.team===localTeam() && target.type==='helicopter' && selected.some(unit=>canTransport(target,unit)))) {
       void sendPlayerOrder({kind:'target',units:selected.map(unit=>unit.viewId),target:target.viewId},'已下达目标指令。');
       return;
     }
-    if (selected.length && (!target || target.width || target.team!=='player')) {
+    if (selected.length && (!target || target.width || target.team!==localTeam())) {
       const destination=target?.width?yardCenter(target):tile;
       const coordinates={x:Math.round(destination.x),y:Math.round(destination.y)};
       const message=selected.every(unit=>unit.type==='bomber')?'已指定轰炸位置。':'已下达移动指令。';
@@ -6904,7 +6946,7 @@ function selectBox(drag) {
   const center=project(camera.x,camera.y);
   select(units.filter(unit=>{
     if (!canSeeEntity(viewFaction(),unit)) return false;
-    if (playerCanCommand() && unit.team!=='player') return false;
+    if (playerCanCommand() && unit.team!==localTeam()) return false;
     const point=project(unit.x,unit.y,UNIT_ART[unit.type].hitHeight*.44+unitElevation(unit));
     const x=viewport.w/2+(point.x-center.x)*viewport.scale;
     const y=viewport.h/2+(point.y-center.y)*viewport.scale;
@@ -6922,7 +6964,7 @@ function updateMapPointer(point) {
     if (!sameTile(placement.tile,tile)) {
       const {width,height}=BUILDINGS[placement.type];
       placement.tile=tile;
-      placement.valid=canPlace({...tile,type:placement.type,team:'player',width,height,axis:placement.axis});
+      placement.valid=canPlace({...tile,type:placement.type,team:localTeam(),width,height,axis:placement.axis});
     }
   }
   syncPlayerPointer();
@@ -7028,11 +7070,6 @@ radar.addEventListener('pointerdown',event=>{
 radar.addEventListener('pointermove',event=>{
   if (radar.hasPointerCapture(event.pointerId)) navigateRadar(event);
 });
-for (const [id,team,origin] of [['view-blue','player',mcv],['view-red','enemy',enemyMcv]]) {
-  byId(id).addEventListener('click',()=>{
-    changeObserverPerspective(team,origin);
-  });
-}
 byId('close-building').addEventListener('click',()=>{
   if (game.placement) {
     game.placement=null;
@@ -7169,15 +7206,39 @@ function frame(timestamp) {
   requestAnimationFrame(frame);
 }
 
-reveal(FACTIONS.player,blueOrigin.x,blueOrigin.y,11,true);
-reveal(FACTIONS.enemy,redOrigin.x,redOrigin.y,11,true);
-for (const vehicle of [mcv,enemyMcv]) {
-  // Keep the future construction-yard footprint clear while sharing normal spawn/collision rules.
+function seedStartingArmy(vehicle) {
+  reveal(FACTIONS[vehicle.team],vehicle.x,vehicle.y+1,11,true);
   const staging={type:'yard',team:vehicle.team,x:vehicle.x-1,y:vehicle.y,width:YARD.width,height:YARD.height};
   for (const type of ['tank','tank','soldier','soldier','soldier']) spawnUnit(staging,type);
+  refreshVision(FACTIONS[vehicle.team],units.filter(unit=>unit.team===vehicle.team),[]);
 }
-refreshVision(FACTIONS.player,units.filter(unit=>unit.team==='player'),[]);
-refreshVision(FACTIONS.enemy,units.filter(unit=>unit.team==='enemy'),[]);
+function addParticipant(config,origin) {
+  TEAM_CONFIG_INDEX.set(config.id,config);
+  FACTIONS[config.id]=createFaction(config.id);
+  installTeamPaint(config.id);
+  const vehicle={x:origin.x,y:origin.y-1,id:nextUnitId++,team:config.id,type:'mcv',label:'基地车',speed:2.55,vision:5.8,
+    heading:.16,mode:'idle',route:[],goal:null,health:MCV_HEALTH};
+  units.push(vehicle);seedStartingArmy(vehicle);return vehicle;
+}
+function withdrawParticipant(team) {
+  for (const target of [...units,...structures].filter(target=>target.team===team)) {
+    if (target.type==='oil') closeOilHolding(target,'lost');
+    const point=target.width?yardCenter(target):target;
+    const witnesses=Object.values(FACTIONS).filter(f=>canSeeEntity(f,target)).map(f=>f.team);
+    wrecks.push({x:point.x,y:point.y,time:game.time,big:true,building:target.width?{x:target.x,y:target.y,width:target.width,height:target.height}:null,witnesses});
+    target.health=0;if (target.passengers) target.passengers.length=0;
+    playAt('explosion',point,target);
+  }
+  for (const list of [units,structures]) for (let i=list.length-1;i>=0;i--) if(list[i].team===team)list.splice(i,1);
+  for (const unit of units) {
+    if (unit.attackTarget?.team===team) clearAttackOrder(unit);
+    if (unit.captureTarget?.team===team) stopCapture(unit);
+    if (unit.serviceDepot?.team===team) {releaseGarage(unit);unit.mode='idle';unit.goal=null;unit.route=[];}
+  }
+  delete FACTIONS[team];pathStructureCount=-1;refreshPowerGrids();
+}
+for (const vehicle of initialVehicles) seedStartingArmy(vehicle);
+if (!ENGINE_ONLY && !FACTIONS.observer) FACTIONS.observer=createFaction('observer');
 if (!ENGINE_ONLY) {
   sizeCanvas(map,viewport,MAX_VIEWPORT_PIXELS);
   sizeCanvas(radar,radarViewport);

@@ -1,6 +1,7 @@
 'use strict';
 
 const http = require('node:http');
+const {randomBytes}=require('node:crypto');
 const fs = require('node:fs/promises');
 const { createReadStream } = require('node:fs');
 const path = require('node:path');
@@ -42,7 +43,7 @@ let stopping = false;
 
 function launchWorker(host, actualPort) {
   worker = new Worker(path.join(root,'match-worker.cjs'),{workerData:{
-    checkpointFile, plannerOrigin:codex ? 'http://' + host + ':' + actualPort : '',
+    checkpointFile,idleTimeoutMs:process.env.CC_IDLE_TIMEOUT_MS?Number(process.env.CC_IDLE_TIMEOUT_MS):600000, plannerOrigin:codex ? 'http://' + host + ':' + actualPort : '',
   }});
   worker.on('message',({id,result,error})=>{
     const entry = pending.get(id);
@@ -52,7 +53,7 @@ function launchWorker(host, actualPort) {
     if (error) entry.reject(new Error(error));
     else entry.resolve(result);
   });
-  worker.on('error',error=>console.error('Match worker:',error.message));
+  worker.on('error',error=>console.error('Match worker:',error.stack??error.message));
   worker.on('exit',()=>{
     worker = null;
     for (const entry of pending.values()) {
@@ -71,7 +72,7 @@ function matchCall(action, fields={}) {
     const timer = setTimeout(()=>{
       pending.delete(id);
       reject(new Error('Match worker timed out'));
-    },8500);
+    },action==='create'?30000:8500);
     pending.set(id,{timer,resolve,reject});
     try {
       worker.postMessage({action,id,...fields});
@@ -133,29 +134,39 @@ async function staticFile(request,response,pathname) {
   }
 }
 
+function identity(request,response) {
+  const token=(request.headers.cookie??'').split(';').map(value=>value.trim()).find(value=>value.startsWith('cc_session='))?.slice(11);
+  if(token && /^[0-9a-f]{48}$/.test(token))return token;
+  const fresh=randomBytes(24).toString('hex');
+  response.setHeader('Set-Cookie','cc_session='+fresh+'; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000');
+  return fresh;
+}
+function resultStatus(result) {return !result?.error?200:result.error==='forbidden'?403:result.error==='invalid'||result.error.startsWith('invalid_')?400:409;}
 async function serve(request,response) {
   const url = new URL(request.url,'http://localhost');
   const send=(status,body)=>sendJson(request,response,status,body);
+  const session=url.pathname.startsWith('/api/')?identity(request,response):null;
+  const roomCall=(action,fields={})=>matchCall(action,{session,...fields});
   if (request.method==='GET' && url.pathname==='/api/strategy/status') return send(200,{available:Boolean(codex),protocol:6});
   if (request.method==='GET' && url.pathname==='/api/match/status') {
-    return send(200,await matchCall('status'));
+    return send(200,await roomCall('status'));
   }
   if (request.method==='GET' && url.pathname==='/api/match') {
     const team=url.searchParams.get('perspective')??'player';
-    if (team!=='player' && team!=='enemy') return send(400,{error:'invalid_perspective'});
-    return send(200,await matchCall('snapshot',{team}));
+    if(!/^[a-zA-Z0-9_-]{1,80}$/.test(team))return send(400,{error:'invalid_perspective'});
+    return send(200,await roomCall('snapshot'));
   }
   const historyLog=/^\/api\/history\/(\d{1,12})\/log$/.exec(url.pathname);
   if (request.method==='GET' && (url.pathname==='/api/history' || historyLog)) {
     const team=url.searchParams.get('perspective')??'player';
-    if (team!=='player' && team!=='enemy') return send(400,{error:'invalid_perspective'});
+    if(!/^[a-zA-Z0-9_-]{1,80}$/.test(team))return send(400,{error:'invalid_perspective'});
     if (!historyLog) {
       const before=url.searchParams.get('before');
       if (before!==null && !/^[1-9]\d{0,11}$/.test(before)) return send(400,{error:'invalid_round'});
-      return send(200,await matchCall('history',{team,before:Number(before)}));
+      return send(200,await roomCall('history',{team,before:Number(before)}));
     }
     const round=Number(historyLog[1]);
-    const file=await matchCall('historyLog',{team,round});
+    const file=await roomCall('historyLog',{team,round});
     if (!file) return send(404,{error:'round_not_found'});
     const {size}=await fs.stat(file);
     response.writeHead(200,{ 'Content-Type':'application/x-ndjson; charset=utf-8','Content-Length':size,
@@ -164,26 +175,26 @@ async function serve(request,response) {
   }
   if (request.method==='POST') {
     if (!sameOrigin(request)) return send(403,{error:'origin'});
-    if (url.pathname==='/api/match/start-human' || url.pathname==='/api/match/end') {
-      if (Number(request.headers['content-length']??0)!==0 || request.headers['transfer-encoding']) {
-        return send(400,{error:'unexpected_body'});
-      }
-      const action=url.pathname.split('/').pop();
-      return send(200,await matchCall(action,{current:request.headers['x-match-id']}));
+    const roomRoutes={'/api/match/create':'create','/api/match/join':'join','/api/match/leave':'leave','/api/match/end':'end','/api/session/activity':'activity'};
+    if(roomRoutes[url.pathname]) {
+      const action=roomRoutes[url.pathname];
+      const body=['create','join'].includes(action)?await readJson(request):null;
+      const result=await roomCall(action,{body,current:request.headers['x-match-id']});
+      return send(resultStatus(result),result);
     }
     if (url.pathname==='/api/match/order') {
       const order=await readJson(request);
       if (!order || typeof order.kind!=='string') return send(400,{error:'invalid'});
-      const result=await matchCall('order',{order,current:request.headers['x-match-id']});
-      return send(result.error==='invalid'?400:result.error?409:200,result);
+      const result=await roomCall('order',{order,current:request.headers['x-match-id']});
+      return send(resultStatus(result),result);
     }
     if (url.pathname==='/api/match/building-style') {
       const selection=await readJson(request);
-      if (!['player','enemy'].includes(selection?.team) ||
+      if (typeof selection?.team!=='string' ||
           !validBuildingThemePreference(selection.preference)) return send(400,{error:'invalid_building_style'});
-      const state=await matchCall('building-style',{team:selection.team,preference:selection.preference,
+      const state=await roomCall('building-style',{team:selection.team,preference:selection.preference,
         current:request.headers['x-match-id']});
-      return state?send(200,state):send(409,{error:'match_changed'});
+      return state?.error?send(state.error==='forbidden'?403:409,state):state?send(200,state):send(409,{error:'match_changed'});
     }
     if (url.pathname==='/api/training/drills') {
       const selection=await readJson(request);

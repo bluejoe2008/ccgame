@@ -2,8 +2,8 @@
 
 self.onmessage=({data})=>{
   if (Object.hasOwn(data,'seed')) {
-    self.matchEngine={seed:data.seed};
-    importScripts('commander.js?v=command-buttons','building-themes.js?v=4','game.js?v=box-selection');
+    self.matchEngine={seed:data.seed,capacity:data.capacity,teams:[]};
+    importScripts('commander.js?v=command-buttons','building-themes.js?v=multiplayer-themes','game.js?v=multiplayer-themes');
     groundTexture=data.texture;
     return;
   }
