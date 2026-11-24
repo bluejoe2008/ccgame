@@ -583,7 +583,7 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
 .battlefield { grid-template-rows:auto minmax(0,1fr) 34px; }
 .map-top { flex-wrap:wrap;gap:8px 12px;padding-block:8px; }
 .map-label { flex-wrap:wrap; }
-.room-strip { flex:1 0 100%;display:flex;flex-wrap:wrap;gap:6px 16px;font-size:11px;color:#c6d2b5; }
+.room-strip { flex:1 0 100%;display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:11px;color:#c6d2b5; }
 #idle-warning { color:#ffc888; }
 .room-form { display:grid;gap:14px;padding:20px; }
 .room-form label { display:flex;justify-content:space-between;align-items:center;gap:16px;font-size:13px; }
@@ -596,8 +596,10 @@ dialog dd { margin: 3px 0 0; color: #d2d8c4; font-size: 12px; line-height: 1.6; 
 .room-colors { display:grid;grid-template-columns:repeat(8,1fr);gap:7px; }
 .room-colors button { height:26px;border:1px solid #d6e1c277;border-radius:4px; }
 .room-colors button:disabled { opacity:.18; }
+.roster-details { margin-left:auto;min-width:0; }
+.roster-details[open] { flex:1 0 100%;margin-left:0; }
 .roster-details summary { font-size:12px;cursor:pointer; }
-#room-roster { max-height:170px;overflow:auto;scrollbar-width:thin;display:grid;gap:3px;padding-top:6px; }
+#room-roster { max-height:170px;overflow:auto;scrollbar-width:thin;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr));gap:3px;padding-top:6px; }
 .roster-row { width:100%;display:grid;grid-template-columns:10px minmax(0,1fr);gap:3px 6px;text-align:left;border:0;background:#1c281d88;padding:5px;font-size:11px; }
 .roster-row i { width:8px;height:8px;border-radius:2px;margin-top:3px; }
 .roster-row span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
