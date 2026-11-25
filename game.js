@@ -243,7 +243,7 @@ function teamArt(image,team) {
 let nextUnitId=Math.max(4,...initialVehicles.map(unit=>unit.id))+1;
 
 const camera={x:blueOrigin.x+1.8,y:blueOrigin.y+2.6};
-const viewport = {w: 0, h: 0, dpr: 1, get scale() { return this.w<610 ? .49 : .70; }};
+const viewport = {w: 0, h: 0, dpr: 1, get scale() { return (this.w<610 ? .49 : .70)*.5; }};
 const radarViewport = {w: 0, h: 0, dpr: 1};
 const radarTerrain=ENGINE_ONLY?null:document.createElement('canvas');
 let radarTerrainCache=null;
@@ -737,7 +737,7 @@ const TERRAIN_NEIGHBORS=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,-1],[-1,1],[1,1]];
 const groundArt = new Map();
 const groundPreviews = new Map();
 const featheredTerrain = new WeakMap();
-const terrainLayer = ENGINE_ONLY?null:document.createElement('canvas');
+const terrainLayer = byId('map-terrain');
 const revealMask = ENGINE_ONLY?null:document.createElement('canvas');
 const blurredMask = ENGINE_ONLY?null:document.createElement('canvas');
 const terrainPainter = terrainLayer?.getContext('2d');
@@ -889,18 +889,36 @@ function groundDetail(sx,sy,grass,wet,concrete,rock,bridge) {
   return mix(dry,groundTexture[2][index],wet);
 }
 
+const sceneryBitmaps=new WeakMap();
+function sceneryBitmap(image,width) {
+  const nativeWidth=image.naturalWidth??image.width;
+  const targetWidth=Math.max(1,Math.ceil(width*viewport.scale*viewport.dpr));
+  if (nativeWidth<=targetWidth*1.5) return image;
+  let sizes=sceneryBitmaps.get(image);
+  if (!sizes) {sizes=new Map();sceneryBitmaps.set(image,sizes);}
+  if (!sizes.has(targetWidth)) {
+    const scaled=document.createElement('canvas');scaled.width=targetWidth;
+    scaled.height=Math.max(1,Math.ceil(targetWidth*(image.naturalHeight??image.height)/nativeWidth));
+    scaled.getContext('2d').drawImage(image,0,0,scaled.width,scaled.height);
+    sizes.set(targetWidth,scaled);
+    if (sizes.size>128) sizes.delete(sizes.keys().next().value);
+  }
+  return sizes.get(targetWidth);
+}
+
 function sprite(context,name,x,bottom,width,mirror=false) {
   const image=name==='poor-ore'?poorOreArt:sprites.get(name);
   const nativeWidth=image?.naturalWidth??image?.width;
   if (!nativeWidth) return false;
   const height=width*(image.naturalHeight??image.height)/nativeWidth;
+  const bitmap=sceneryBitmap(image,width);
   if (mirror) {
     context.save();
     context.translate(x,bottom);
     context.scale(-1,1);
-    context.drawImage(image,-width/2,-height,width,height);
+    context.drawImage(bitmap,-width/2,-height,width,height);
     context.restore();
-  } else context.drawImage(image,x-width/2,bottom-height,width,height);
+  } else context.drawImage(bitmap,x-width/2,bottom-height,width,height);
   return true;
 }
 
@@ -976,7 +994,7 @@ function paintTerrainChunk(cx,cy,tile,step=TEXTURE_STEP) {
 
 function saveTerrainChunk(key,art) {
   groundArt.set(key,art);
-  if (groundArt.size>260) {
+  if (groundArt.size>768) {
     const oldest=groundArt.keys().next().value;
     groundArt.get(oldest).close?.();
     groundArt.delete(oldest);
@@ -1025,7 +1043,7 @@ function terrainPreview(x,y,key) {
   if (groundPreviews.has(key)) return groundPreviews.get(key);
   const tile=paintTerrainChunk(x,y,document.createElement('canvas'),PREVIEW_STEP);
   groundPreviews.set(key,tile);
-  if (groundPreviews.size>160) groundPreviews.delete(groundPreviews.keys().next().value);
+  if (groundPreviews.size>1024) groundPreviews.delete(groundPreviews.keys().next().value);
   return tile;
 }
 
@@ -1218,7 +1236,7 @@ function drawGround(center) {
     groundMap.height=terrainLayer.height;
   }
   drawAtmosphere(center,w,h);
-  groundCtx.drawImage(terrainLayer,0,0);
+  // Terrain has its own visible canvas; avoid copying the full image every update.
   backgroundView=terrain;
   backgroundTime=game.time;
 }
@@ -2996,6 +3014,7 @@ const pathCell=(x,y)=>(y-bounds.minY+1)*PATH_COLUMNS+x-bounds.minX+1;
 const pathTerrain=new Uint8Array(PATH_COLUMNS*PATH_ROWS).fill(255);
 let pathBuildings;
 let pathStructureCount=-1;
+let regionBuildings=null,pathRegions=null;
 
 function pathBuildingGrid() {
   if (pathStructureCount!==structures.length) {
@@ -3026,6 +3045,28 @@ function pathTileOpen(buildings,x,y) {
   return !buildings[index] && groundPathCost(x,y,index)!==0;
 }
 
+function pathRegionGrid(buildings) {
+  if (regionBuildings===buildings) return pathRegions;
+  pathRegions=new Int32Array(PATH_COLUMNS*PATH_ROWS);
+  const queue=new Int32Array(pathRegions.length);
+  let region=0;
+  for (let y=bounds.minY;y<=bounds.maxY;y++) for (let x=bounds.minX;x<=bounds.maxX;x++) {
+    const start=pathCell(x,y);
+    if (pathRegions[start] || !pathTileOpen(buildings,x,y)) continue;
+    region++;let head=0,tail=1;queue[0]=start;pathRegions[start]=region;
+    while (head<tail) {
+      const cell=queue[head++],cx=(cell%PATH_COLUMNS)+bounds.minX-1,cy=Math.floor(cell/PATH_COLUMNS)+bounds.minY-1;
+      for (const [dx,dy] of NEIGHBORS) {
+        const nx=cx+dx,ny=cy+dy,key=pathCell(nx,ny);
+        if (pathRegions[key] || !pathTileOpen(buildings,nx,ny) || (dx && dy &&
+            (!pathTileOpen(buildings,cx+dx,cy) || !pathTileOpen(buildings,cx,cy+dy)))) continue;
+        pathRegions[key]=region;queue[tail++]=key;
+      }
+    }
+  }
+  regionBuildings=buildings;return pathRegions;
+}
+
 function findPath(destination,unit,avoidUnits=false,radius=8,{nearest=false}={}) {
   if (isAirborne(unit)) {
     if (!onMap(destination.x,destination.y) ||
@@ -3039,22 +3080,55 @@ function findPath(destination,unit,avoidUnits=false,radius=8,{nearest=false}={})
   const buildings=pathBuildingGrid();
   const open=(x,y)=>(!avoidUnits || inside(x,y)) && pathTileOpen(buildings,x,y);
   if (!nearest && !open(destination.x,destination.y)) return null;
-  const obstacles=avoidUnits?units.filter(other=>other!==unit && other.health>0 &&
+  if (!avoidUnits && !nearest && distanceTo(here,destination)>8) {
+    const regions=pathRegionGrid(buildings),targetRegion=regions[pathCell(destination.x,destination.y)];
+    const startRegion=regions[pathCell(here.x,here.y)];
+    if (startRegion && startRegion!==targetRegion) return null;
+    if (!startRegion && !NEIGHBORS.some(([dx,dy])=>{
+      const x=here.x+dx,y=here.y+dy;
+      return regions[pathCell(x,y)]===targetRegion && (!dx || !dy ||
+        (pathTileOpen(buildings,here.x+dx,here.y) && pathTileOpen(buildings,here.x,here.y+dy)));
+    })) return null;
+  }
+  const obstacles=avoidUnits?nearbyUnits(here.x-radius-1,here.y-radius-1,here.x+radius+1,here.y+radius+1).filter(other=>other!==unit && other.health>0 &&
     !isAirborne(other) && collisionLayerMatches(unit,other) && !canRunOver(unit,other) &&
     Math.abs(other.x-here.x)<radius+1 && Math.abs(other.y-here.y)<radius+1)
     .map(other=>({x:other.x,y:other.y,radiusSquared:(UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type])**2})):null;
-  const occupied=(x,y)=>obstacles.some(other=>
-    (x-other.x)**2+(y-other.y)**2<other.radiusSquared);
+  // A detour only needs blockers touching the current edge, not every unit
+  // in the search window. Keep these buckets local to this route search.
+  const obstacleCells=new Map();
+  if (obstacles) for (const other of obstacles) {
+    const radius=Math.sqrt(other.radiusSquared);
+    for (let y=Math.floor(other.y-radius);y<=Math.floor(other.y+radius);y++) {
+      for (let x=Math.floor(other.x-radius);x<=Math.floor(other.x+radius);x++) {
+        const key=pathCell(x,y),cell=obstacleCells.get(key);
+        if (cell) cell.push(other);else obstacleCells.set(key,[other]);
+      }
+    }
+  }
+  const occupied=(x,y)=>(obstacleCells.get(pathCell(Math.floor(x),Math.floor(y)))??[])
+    .some(other=>(x-other.x)**2+(y-other.y)**2<other.radiusSquared);
+  let obstacleCheck=0;
   const blocked=(x,y,nx,ny)=>{
     const dx=nx-x,dy=ny-y;
     if (!dx && !dy) return false;
     const travelSquared=dx*dx+dy*dy;
-    for (const other of obstacles) {
-      const ox=other.x-x,oy=other.y-y;
-      const projection=ox*dx+oy*dy;
-      if (ox*ox+oy*oy<other.radiusSquared && projection<=0) continue;
-      const along=Math.max(0,Math.min(1,projection/travelSquared));
-      if ((ox-dx*along)**2+(oy-dy*along)**2<other.radiusSquared) return true;
+    const stamp=++obstacleCheck;
+    const minX=Math.floor(Math.min(x,nx)),maxX=Math.floor(Math.max(x,nx));
+    const minY=Math.floor(Math.min(y,ny)),maxY=Math.floor(Math.max(y,ny));
+    for (let cy=minY;cy<=maxY;cy++) for (let cx=minX;cx<=maxX;cx++) {
+      const cell=obstacleCells.get(pathCell(cx,cy));
+      if (!cell) continue;
+      for (const other of cell) {
+        if (other.checked===stamp) continue;
+        other.checked=stamp;
+        const ox=other.x-x,oy=other.y-y;
+        const projection=ox*dx+oy*dy;
+        if (ox*ox+oy*oy<other.radiusSquared && projection<=0) continue;
+        const fraction=projection/travelSquared;
+        const along=fraction<0?0:fraction>1?1:fraction;
+        if ((ox-dx*along)**2+(oy-dy*along)**2<other.radiusSquared) return true;
+      }
     }
     return false;
   };
@@ -3393,13 +3467,53 @@ function canRunOver(vehicle,target) {
     (isPersonnel(target) || target.type==='dog');
 }
 
+const UNIT_BIN_SIZE=2;
+const MAX_UNIT_RADIUS=Math.max(...Object.values(UNIT_RADIUS));
+let unitBins=null,unitBinPositions=null,unitBinOrder=null,nextBinOrder=0;
+const unitBinKey=(x,y)=>x*4096+y;
+function beginUnitIndex() {
+  unitBins=new Map();unitBinPositions=new Map();unitBinOrder=new Map();nextBinOrder=0;
+  for (const unit of units) updateUnitIndex(unit);
+}
+function endUnitIndex() {unitBins=null;unitBinPositions=null;unitBinOrder=null;}
+function updateUnitIndex(unit) {
+  if (!unitBins) return;
+  if (unit.health<=0 || unit.embarked) {removeUnitIndex(unit);return;}
+  const key=unitBinKey(Math.floor(unit.x/UNIT_BIN_SIZE),Math.floor(unit.y/UNIT_BIN_SIZE));
+  const previous=unitBinPositions.get(unit);
+  if (previous===key) return;
+  if (previous!==undefined) unitBins.get(previous).delete(unit);
+  let bin=unitBins.get(key);if (!bin) unitBins.set(key,bin=new Set());
+  bin.add(unit);unitBinPositions.set(unit,key);
+  if (!unitBinOrder.has(unit)) unitBinOrder.set(unit,nextBinOrder++);
+}
+function removeUnitIndex(unit) {
+  if (!unitBins) return;
+  const key=unitBinPositions.get(unit);
+  if (key!==undefined) unitBins.get(key).delete(unit);
+  unitBinPositions.delete(unit);
+}
+function nearbyUnits(minX,minY,maxX,maxY) {
+  if (!unitBins) return units;
+  const found=[];
+  for (let y=Math.floor(minY/UNIT_BIN_SIZE);y<=Math.floor(maxY/UNIT_BIN_SIZE);y++) {
+    for (let x=Math.floor(minX/UNIT_BIN_SIZE);x<=Math.floor(maxX/UNIT_BIN_SIZE);x++) {
+      const bin=unitBins.get(unitBinKey(x,y));if (bin) for (const unit of bin) found.push(unit);
+    }
+  }
+  // Preserve array order when several units can block the same segment.
+  return found.sort((a,b)=>unitBinOrder.get(a)-unitBinOrder.get(b));
+}
+
 function segmentDistanceSquared(x,y,dx,dy) {
   const travelSquared=dx*dx+dy*dy;
   const along=travelSquared?Math.max(0,Math.min(1,(x*dx+y*dy)/travelSquared)):0;
   return (x-dx*along)**2+(y-dy*along)**2;
 }
 
-function unitPositionBlocked(unit,x,y,allowRunOver=false,candidates=units) {
+function unitPositionBlocked(unit,x,y,allowRunOver=false,candidates=null) {
+  const margin=UNIT_RADIUS[unit.type]+MAX_UNIT_RADIUS;
+  candidates??=nearbyUnits(x-margin,y-margin,x+margin,y+margin);
   return candidates.some(other=>other!==unit && !(other.health<=0) && collisionLayerMatches(unit,other) &&
     !(allowRunOver && canRunOver(unit,other)) &&
     Math.hypot(x-other.x,y-other.y)<UNIT_RADIUS[unit.type]+UNIT_RADIUS[other.type]);
@@ -3409,9 +3523,12 @@ function unitPathBlocked(unit,fromX,fromY,toX,toY) {
   return Boolean(blockingUnit(unit,fromX,fromY,toX,toY));
 }
 
-function blockingUnit(unit,fromX,fromY,toX,toY,candidates=units) {
+function blockingUnit(unit,fromX,fromY,toX,toY,candidates=null) {
   const dx=toX-fromX, dy=toY-fromY;
   if (!dx && !dy) return null;
+  const margin=UNIT_RADIUS[unit.type]+MAX_UNIT_RADIUS;
+  candidates??=nearbyUnits(Math.min(fromX,toX)-margin,Math.min(fromY,toY)-margin,
+    Math.max(fromX,toX)+margin,Math.max(fromY,toY)+margin);
   for (const other of candidates) {
     if (other===unit || other.health<=0 || !collisionLayerMatches(unit,other) || canRunOver(unit,other)) continue;
     const x=other.x-fromX, y=other.y-fromY;
@@ -3454,7 +3571,9 @@ function clearMinerLane(miner,blocker,node) {
 function runOverInfantry(vehicle,fromX,fromY,radius) {
   const dx=vehicle.x-fromX, dy=vehicle.y-fromY;
   if (!dx && !dy) return;
-  for (const unit of units) {
+  const margin=Math.max(radius,UNIT_RADIUS[vehicle.type]+MAX_UNIT_RADIUS);
+  for (const unit of nearbyUnits(Math.min(fromX,vehicle.x)-margin,Math.min(fromY,vehicle.y)-margin,
+      Math.max(fromX,vehicle.x)+margin,Math.max(fromY,vehicle.y)+margin)) {
     if (unit.health<=0 || !canRunOver(vehicle,unit)) continue;
     const contact=Math.max(radius,UNIT_RADIUS[vehicle.type]+UNIT_RADIUS[unit.type]);
     if (segmentDistanceSquared(unit.x-fromX,unit.y-fromY,dx,dy)>contact*contact) continue;
@@ -3599,6 +3718,7 @@ function boardTransport(carrier,unit) {
   unit.velocity=0;
   unit.embarked=true;
   units.splice(index,1);
+  removeUnitIndex(unit);
   carrier.passengers.push(unit);
   if (game.selection.includes(unit)) select(game.selection.filter(member=>member!==unit));
   return true;
@@ -3626,6 +3746,7 @@ function unloadTransport(carrier) {
     Object.assign(passenger,position);
     delete passenger.embarked;
     units.push(carrier.passengers.shift());
+    updateUnitIndex(passenger);
     count++;
   }
   if (count) log(factionName(carrier.team)+'运输直升机已卸载 '+count+' 个单位。',carrier.team);
@@ -3849,8 +3970,10 @@ function recordTravel(unit,distance,dt,turn=0) {
   while (movementDust.length>175 || game.time-movementDust[0].time>.66) movementDust.shift();
 }
 
-const MARCH_LIMIT=6;
+const MARCH_LIMIT=18;
 const TRAIL_STEP=.32;
+const marchLaneCache=new WeakMap();
+const marchFollowState=new WeakMap();
 
 function resetMarchTrail(group,leader) {
   group.leader=leader;
@@ -3867,7 +3990,7 @@ function formMarchGroup(leader,candidates) {
   const dx=Math.cos(direction),dy=Math.sin(direction);
   const followers=candidates.filter(unit=>unit!==leader && unit.team===leader.team && unit.health>0 &&
     !unit.marchGroup && !isAirborne(unit) && !unit.serviceDepot && !unit.embarked &&
-    distanceTo(unit,leader)<=5 && (unit.x-leader.x)*dx+(unit.y-leader.y)*dy<.55 &&
+    distanceTo(unit,leader)<=8 && (unit.x-leader.x)*dx+(unit.y-leader.y)*dy<.55 &&
     groundPathOpen(unit.x,unit.y,leader.x,leader.y))
     .sort((a,b)=>distanceTo(a,leader)-distanceTo(b,leader)).slice(0,MARCH_LIMIT-1);
   if (!followers.length) return followers;
@@ -3894,20 +4017,37 @@ function endMarchGroup(group) {
   }
 }
 
-function followMarchTrail(unit,trail,gap) {
+function followMarchTrail(unit,trail,gap,lateral=0) {
   const limit=trail.at(-1).distance-gap;
+  const buildings=pathBuildingGrid();
+  const lanePoint=index=>{
+    const point=trail[index];
+    if (!lateral) return point;
+    const before=trail[Math.max(0,index-1)],after=trail[Math.min(trail.length-1,index+1)];
+    let cached=marchLaneCache.get(point);
+    if (!cached || cached.buildings!==buildings || cached.before!==before || cached.after!==after) {
+      cached={buildings,before,after,lanes:new Map()};marchLaneCache.set(point,cached);
+    }
+    if (cached.lanes.has(lateral)) return cached.lanes.get(lateral);
+    const dx=after.x-before.x,dy=after.y-before.y,length=Math.hypot(dx,dy)||1;
+    const offset={x:point.x-dy/length*lateral,y:point.y+dx/length*lateral};
+    const lane=groundPathOpen(point.x,point.y,offset.x,offset.y)?offset:point;
+    cached.lanes.set(lateral,lane);return lane;
+  };
   let cursor=unit.marchCursor;
-  while (cursor<trail.length && trail[cursor].distance<=limit && distanceTo(unit,trail[cursor])<.14) cursor++;
+  while (cursor<trail.length && trail[cursor].distance<=limit && distanceTo(unit,lanePoint(cursor))<.14) cursor++;
   // A short clear chord smooths the motion without crossing a blocked tile or skipping a corner.
   let waypoint=null;
-  for (let index=cursor;index<Math.min(trail.length,cursor+6) && trail[index].distance<=limit;index++) {
-    const point=trail[index];
+  let end=Math.min(trail.length-1,cursor+5);
+  while (end>=cursor && trail[end].distance>limit) end--;
+  for (let index=end;index>=cursor;index--) {
+    const point=lanePoint(index);
     if (!groundPathOpen(unit.x,unit.y,point.x,point.y)) {
-      if (waypoint) break;
       continue;
     }
     waypoint=point;
     unit.marchCursor=index;
+    break;
   }
   if (!waypoint) unit.marchCursor=cursor;
   unit.route=waypoint?[{x:waypoint.x,y:waypoint.y}]:[];
@@ -3949,14 +4089,25 @@ function advanceMarchGroups() {
     else group.finishedAt=null;
     group.speed=Math.min(...group.members.map(unit=>unit.speed))*.93;
     let settled=finished;
-    let previous=leader,gap=0;
+    let previous=leader,gap=0,index=0;
+    const mark=trail.at(-1).distance,buildings=pathBuildingGrid();
+    const lanes=group.members.length>6?3:1;
     for (const unit of group.members) {
       if (unit===leader) continue;
-      gap+=UNIT_RADIUS[previous.type]+UNIT_RADIUS[unit.type]+.32;
-      settled=followMarchTrail(unit,trail,gap) && settled;
+      if (lanes===1) gap+=UNIT_RADIUS[previous.type]+UNIT_RADIUS[unit.type]+.32;
+      else gap=(Math.floor(index/lanes)+1)*1.35;
+      const lateral=lanes===1?0:(index%lanes-1)*1.25;
+      let state=marchFollowState.get(unit);
+      if (!state || state.trail!==trail || state.mark!==mark || state.buildings!==buildings || state.gap!==gap || state.lateral!==lateral ||
+          (!unit.route.length && !state.waiting)) {
+        state={trail,mark,buildings,gap,lateral,waiting:followMarchTrail(unit,trail,gap,lateral)};
+        marchFollowState.set(unit,state);
+      }
+      settled=state.waiting && !unit.route.length && settled;
       previous=unit;
+      index++;
     }
-    if (settled || (finished && game.time-group.finishedAt>7) ||
+    if (settled || (finished && game.time-group.finishedAt>12+group.members.length*.5) ||
         (!finished && game.time-group.lastProgress>10)) endMarchGroup(group);
   }
 }
@@ -5664,6 +5815,11 @@ function distanceTo(a,b) {
   return Math.hypot(a.x-b.x,a.y-b.y);
 }
 
+function distanceSquared(a,b) {
+  const x=a.x-b.x,y=a.y-b.y;
+  return x*x+y*y;
+}
+
 function nearestOpponent(unit,opponents,range) {
   let best=null, nearest=range;
   for (const other of opponents) {
@@ -6031,7 +6187,7 @@ function advanceCombat(dt=.04) {
   for (const dog of fighters) {
     if (dog.type!=='dog' || dog.attackTarget || dog.rescueTarget || dog.goal?.kind==='scout' ||
         FACTIONS[dog.team].defensive) continue;
-    const known=infantry.filter(unit=>canSeeEntity(FACTIONS[dog.team],unit));
+    const known=infantry.filter(unit=>distanceSquared(dog,unit)<=WEAPONS.dog.pursuit**2 && canSeeEntity(FACTIONS[dog.team],unit));
     const prey=nearestOpponent(dog,known,WEAPONS.dog.pursuit);
     if (prey) orderAttack([dog],prey,true);
   }
@@ -6042,12 +6198,12 @@ function advanceCombat(dt=.04) {
     const weapon=WEAPONS[unit.type];
     const faction=FACTIONS[unit.team];
     const candidates=unit.type==='dog'?infantry:combatTargets;
-    const eligible=candidates.filter(target=>target.team!==unit.team && canAttackTarget(unit,target) && canSeeEntity(faction,target) &&
+    const eligible=candidates.filter(target=>target.team!==unit.team && distanceSquared(unit,target)<=weapon.range**2 && canAttackTarget(unit,target) && canSeeEntity(faction,target) &&
       (!weapon.minimum || inWeaponRange(unit,target,weapon)));
     const ordered=unit.attackTarget;
     const target=ordered && inWeaponRange(unit,ordered,weapon) ? ordered :
       nearestOpponent(unit,eligible,weapon.range) || (unit.type!=='dog' &&
-        nearestOpponent(unit,engineers.filter(target=>canSeeEntity(faction,target) &&
+        nearestOpponent(unit,engineers.filter(target=>distanceSquared(unit,target)<=weapon.range**2 && canSeeEntity(faction,target) &&
           inWeaponRange(unit,target,weapon)),weapon.range));
     unit.engaged=Boolean(target);
     if (!target) {
@@ -6070,7 +6226,7 @@ function advanceCombat(dt=.04) {
     const spec=BUILDINGS[defense.type];
     if (!spec?.weapon || defense.remaining>0 || defense.health<=0) continue;
     const center={...yardCenter(defense),team:defense.team};
-    const known=mobile.filter(unit=>unit.team!==defense.team && canAttackTarget(defense,unit) &&
+    const known=mobile.filter(unit=>unit.team!==defense.team && distanceSquared(center,unit)<=spec.weapon.range**2 && canAttackTarget(defense,unit) &&
       canSeeEntity(FACTIONS[defense.team],unit));
     const preferred=known.filter(unit=>armoredTarget(unit)===(spec.priority==='armor'));
     const target=nearestOpponent(center,preferred,spec.weapon.range) ||
@@ -6833,6 +6989,20 @@ function focusBase() {
   else notice('当前没有可定位的基地或基地车。');
 }
 
+function selectVisibleType() {
+  if (!playerCanCommand()) return;
+  const types=new Set(game.selection.filter(unit=>unit.team===localTeam()).map(unit=>unit.type));
+  if (!types.size) return;
+  const center=project(camera.x,camera.y),scale=viewport.scale;
+  select(units.filter(unit=>{
+    if (unit.team!==localTeam() || unit.health<=0 || !types.has(unit.type) || !canSeeEntity(viewFaction(),unit)) return false;
+    const point=project(unit.x,unit.y,unitElevation(unit)),art=UNIT_ART[unit.type];
+    const x=(point.x-center.x)*scale+viewport.w/2,y=(point.y-center.y)*scale+viewport.h/2;
+    return x+art.hitWidth*scale>=0 && x-art.hitWidth*scale<=viewport.w &&
+      y+17*scale>=0 && y-art.hitHeight*scale<=viewport.h;
+  }));
+}
+
 function screenPoint(event, element=map) {
   const bounds=element.getBoundingClientRect();
   return {x:event.clientX-bounds.left,y:event.clientY-bounds.top};
@@ -7118,7 +7288,7 @@ document.addEventListener('keydown',event=>{
     return;
   }
   if (event.repeat) return;
-  const shortcuts={f:focusUnit,h:focusBase,d:()=>deployBaseVehicle(game.selected),escape:()=>selectUnit(null)};
+  const shortcuts={f:focusUnit,h:focusBase,t:selectVisibleType,d:()=>deployBaseVehicle(game.selected),escape:()=>selectUnit(null)};
   const action=shortcuts[event.key.toLowerCase()];
   if (action) {
     event.preventDefault();
@@ -7160,13 +7330,16 @@ function stepSimulation(dt) {
   if (!game.outcome) {
     game.time+=dt;
     detourNodesLeft=DETOUR_NODES_PER_TICK;
+    beginUnitIndex();
     try {
       advanceMarchGroups();
       for (const unit of [...units]) {
         if (unit.type==='miner') advanceMiner(unit,dt);
         else navigate(unit,dt);
+        updateUnitIndex(unit);
       }
     } finally {
+      endUnitIndex();
       detourNodesLeft=Infinity;
     }
     advanceOre(dt);

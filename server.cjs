@@ -40,10 +40,11 @@ let plannerBusy = false;
 let drillsRunning = false;
 let nextStrategy = 0;
 let stopping = false;
+const strategyKey=randomBytes(32).toString('hex');
 
 function launchWorker(host, actualPort) {
   worker = new Worker(path.join(root,'match-worker.cjs'),{workerData:{
-    checkpointFile,idleTimeoutMs:process.env.CC_IDLE_TIMEOUT_MS?Number(process.env.CC_IDLE_TIMEOUT_MS):600000, plannerOrigin:codex ? 'http://' + host + ':' + actualPort : '',
+    checkpointFile,idleTimeoutMs:process.env.CC_IDLE_TIMEOUT_MS?Number(process.env.CC_IDLE_TIMEOUT_MS):600000, plannerOrigin:codex ? 'http://' + host + ':' + actualPort : '',strategyKey,
   }});
   worker.on('message',({id,result,error})=>{
     const entry = pending.get(id);
@@ -205,6 +206,7 @@ async function serve(request,response) {
       finally { drillsRunning=false; }
     }
     if (url.pathname==='/api/strategy') {
+      if (request.headers['x-strategy-key']!==strategyKey) return send(403,{error:'forbidden'});
       const snapshot=await readJson(request);
       if (!validObservation(snapshot)) return send(400,{error:'invalid_snapshot'});
       if (!codex) return send(503,{error:'local_strategy'});

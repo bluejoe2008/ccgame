@@ -342,7 +342,7 @@ async function bootObserver() {
     return;
   }
   const script = document.createElement('script');
-  script.src = 'game.js?v=roster-popover';
+  script.src = 'game.js?v=performance-wide-view';
   document.head.append(script);
 }
 bootObserver();

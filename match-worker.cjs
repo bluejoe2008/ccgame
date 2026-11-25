@@ -9,7 +9,7 @@ const { parentPort, workerData } = require('node:worker_threads');
 const { BattleHistory, labels, replaceFile } = require('./battle-history.cjs');
 const { BUILDING_THEMES, RANDOM_BUILDING_THEME, validBuildingThemePreference, resolveBuildingTheme } = require('./building-themes.js');
 
-const { checkpointFile, plannerOrigin } = workerData;
+const { checkpointFile, plannerOrigin, strategyKey } = workerData;
 const version = 1;
 const step = .04;
 fs.mkdirSync(path.dirname(checkpointFile), { recursive:true, mode:0o700 });
@@ -148,7 +148,7 @@ function initialise(description, saved = null) {
   heardAt.clear();
   const context = vm.createContext({
     AbortSignal,
-    fetch: (url, options) => fetch(new URL(url, plannerOrigin), options),
+    fetch: (url, options) => fetch(new URL(url, plannerOrigin), {...options,headers:{...options?.headers,'X-Strategy-Key':strategyKey}}),
     matchEngine: {
       seed: match.seed,
       get buildingStyles() { return match.buildingStyles; },
